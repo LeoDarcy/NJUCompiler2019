@@ -4,68 +4,79 @@
 vector* CreateVector()
 {
     vector* p = (vector*)malloc(sizeof(vector));
-    p->first = NULL;
+    p->var = NULL;
     p->last = NULL;
-    p->size = 0;
+    p->index = -1;
     return p;
 }
 
 void FreeVector(vector* vt)
 {
-    ValHashTable* head = vt->first;
-    vt->first = NULL;
-    vt->last = NULL;
-    while(head != NULL)
+    if(vt->index < 0)
     {
-        ValHashTable* tmp = head;
-        head = head->indexNext;
+        free(vt);
+        return;
+    }
+    while(vt != NULL)
+    {
+        vector* tmp = vt;
+        vt = vt->next;
+        ToolFreeVarObject(tmp->var);
         free(tmp);
     }
-    free(vt);
 }
-void AddItem(vector* vt, ValHashTable* item)
+void AddItem(vector* vt, VarObject* item)
 {
     if(vt == NULL || item == NULL) return;
-    if(vt->size == 0)
+    if(vt->index < 0)
     {
-        vt->first = item;
+        vt->index = 0;
+        vt->var = item;
         vt->last = item;
     }
     else
     {
-        vt->last->indexNext = item;
-        item->indexNext = NULL;
+        vector* last = vt->last;
+        vector* nvt = (vector*)malloc(sizeof(vector));
+        nvt->var = item;
+        nvt->index = last->index + 1;
+        nvt->next = NULL;
+        nvt->last = nvt;
+
+        last->next = nvt;
         vt->last = item;
     }
-    vt->size++;
 }
 
-ValHashTable* GetItemByIndex(vector* vt, int index)
+VarObject* GetItemByIndex(vector* vt, int index)
 {
-    if(vt == NULL || index < 0 || index >= vt->size) return NULL;
-    ValHashTable* p = vt->first;
-    for(int i = 0; i < index; i++)
+    if(vt == NULL || index < 0) return NULL;
+    for(int i = 0; i < index && vt != NULL; i++)
     {
-        p = p->indexNext;
+        vt = vt->next;
     }
-    return p;
+    if(vt == NULL)
+        DebugAssert("Wrong in GetItemByIndex in vectorList.h");
+    return vt->var;
 }
 
 bool RemoveItemByIndex(vector* vt, int index)
 {
-    if(vt == NULL || index < 0 || index >= vt->size) return false;
-    ValHashTable* p = vt->first;
+    DebugAssert("TODO: fill the RemoveItemByIndex in vectorList.h");
+    if(vt == NULL || index < 0) return false;
     if(0 == index)
     {
-        ValHashTable* p = vt->first;
-        vt->first = p->indexNext;
-        if(vt->size == 1)
-            vt->last = NULL;
-        free(p);
+        if(vt->index < 0)
+            DebugAssert("Out of boundary in RemoveItemByIndex");
+        vector* first = vt->next;
+        if(first == NULL)
+        {
+            ;
+        }
     }
     else
     {
-        ValHashTable* before = vt->first;
+        /*ValHashTable* before = vt->first;
         ValHashTable* current = before->indexNext;
         for(int i = 1; i < index; i++)
         {
@@ -77,8 +88,7 @@ bool RemoveItemByIndex(vector* vt, int index)
         {
             vt->last = before;
         }
-        free(p);
+        free(p);*/
     }
-    vt->size--;
     return true;
 }

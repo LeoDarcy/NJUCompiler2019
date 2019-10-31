@@ -45,6 +45,87 @@ unsigned int pjwhash(char *name)
 	}
 	return val;
 }
+//向vtable加入ValHashTable
+void AddToValHashTable(ValHashTable* item)
+{
+	if(item == NULL) return;
+	unsigned int key = pjwhash(item->varobject->name);
+	ValHashTable* queue = vtable[key];
+	if(queue == NULL)
+	{
+		//插入的位置目前还没有
+		item->indexNext = NULL; 
+
+	}
+	else
+	{
+		//插入队首
+		item->indexNext = queue;
+	}
+	vtable[key] = item;
+}
+
+//向Func表中加入fun
+void AddToFuncHashTable(FuncHashTable* item)
+{
+	if(item == NULL) return;
+	unsigned int key = pjwhash(item->varobject->name);
+	FuncHashTable* queue = ftable[key];
+	if(queue == NULL)
+		item->indexNext = NULL;
+	else
+	{
+		item->indexNext = queue;
+	}
+	ftable[key] = item;
+}
+//检查是否符号表中已经有了这个变量,strict表示严格要求匹配当前深度 return NULL表示没找到
+VarObject* CheckInValHashTable(char* name, bool strict)
+{
+	unsigned int key = pjwhash(name);
+	ValHashTable* queue = vtable[key];
+	if(queue == NULL)
+		return NULL;
+	while(queue != NULL)
+	{
+		char* find = queue->varobject->name;
+		if(strcmp(name, find) == 0)
+		{
+			if(strict)
+			{
+				if(queue->depth == CurrentDept)
+					return queue->varobject;
+				else
+					return NULL;
+			}
+			else
+			{
+				return queue->varobject;
+			}
+		}
+		queue = queue->indexNext;
+	}
+	return NULL;
+}
+
+FuncObject* CheckInFuncHashTable(char* name)
+{
+	unsigned int key = pjwhash(name);
+	FuncHashTable* queue = vtable[key];
+	if(queue == NULL)
+		return NULL;
+	while(queue != NULL)
+	{
+		char* find = queue->funcobject->name;
+		if(strcmp(name, find) == 0)
+		{
+			return queue->funcobject;
+		}
+		queue = queue->indexNext;
+	}
+	return NULL;
+}
+
 
 void initNameSpace()
 {
@@ -52,11 +133,126 @@ void initNameSpace()
 	NameSpace->deep = 0;
 	NameSpace->size = 0;
 	NameSpace->items = NULL;
-	NameSpace->nextField = NULL;
+	NameSpace->next = NULL;
+	CurrentDept = 0;
+}
+
+//展开新的作用域
+void CreateNewSpace()
+{
+	CurrentDept++;
+	NameFieldStruct* newSpace = (NameFieldStruct*)malloc(sizeof(NameFieldStruct));
+	newSpace->deep = CurrentDept;
+	newSpace->size = 0;
+	newSpace->items = NULL;
+	//添加到首部
+	newSpace->next = NameSpace;
+	NameSpace = newSpace;
 }
 void AddToNameSpace(ValHashTable* item)
 {
 	if(item == NULL) return;
 	NameSpace->size++;
-	NameSpace->items
+	item->fieldNext = NameSpace->items;
+	NameSpace->item = item;
+}
+
+//将语句块中的变量名全部去掉
+
+void FreeThisNameSpace()
+{
+	if(CurrentDept == 0)
+		DebugAssert("Wrong! delete the first namespace in FreeThisNameSpace in symboltable.c");
+
+	NameFieldStruct* p = NameSpace;
+	NameSpace = NameSpace->next;
+	ValHashTable* items = p->items;
+	for(int i = 0; i < p->size; i++)
+	{
+		ValHashTable* tmp = items;
+		items = items->fieldNext;
+		ToolDeleteValHashTable(tmp);
+	}
+	free(p);
+	CurrentDept--;
+}
+void AddToSymbolTable(VarObject* item)
+{
+	if(item == NULL) return;
+	ValHashTable* table_item = (ValHashTable*)malloc(sizeof(ValHashTable));
+	table_item->varobject = item;
+	AddToValHashTable(table_item);
+	AddToNameSpace(table_item);
+}
+
+
+
+
+////Tool开头是工具
+void ToolDeleteValHashTable(ValHashTable* item)
+{
+	char* name = item->varobject->name;
+	unsigned int key = pjwhash(name);
+	ValHashTable*queue = vtable[key];
+	if(queue == item)
+	{
+		//第一个
+		if(CurrentDept != item->depth)
+			DebugAssert("Wrong in ToolDeleteValHashTable in symboltable.c");
+		vtable[key] = NULL;
+	}
+	else
+	{
+		//不在第一个
+		while(queue != NULL && queue->next != item)
+		{
+			queue = queue->indexNext;
+		}
+		if(queue == NULL)
+			DebugAssert("Can't Find！Wrong in ToolDeleteValHashTable in symboltable.c")；
+		queue->indexNext = item->indexNext;
+	}
+	DebugOutPut("Begin Delete ValHashTable!");
+
+}
+void ToolFreeVarObject(VarObject*item)
+{
+	//主要释放type类型
+	Type type = item->type;
+	char* name = item->type;
+	free(name);
+	free(type);
+}
+void ToolFreeType(Type type)
+{
+	switch (type->kind)
+	{
+	case BASIC:
+		free(type);
+		break;
+	case ARRAY:
+		{ToolFreeType(type->u.array.elem); free(type);}
+		break;
+	case STRUCTURE:
+		{ToolFreeFieldList(type->u.structure); free(type);}
+		break;
+	default:
+		DebugAssert("Wrong in FreeType in symboltable.c");
+		break;
+	}
+}
+void ToolFreeFieldList(FieldList flist)
+{
+	Type type = flist->type;
+	char* name = flist->type;
+	free(name);
+	free(type);
+	ToolFreeFieldList(flist->tail);
+}
+void ToolFreeVarObject(VarObject* item)
+{
+	char*name = item->name;
+	free(name);
+	ToolFreeType(item->type);
+	free(item);
 }

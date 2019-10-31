@@ -6,8 +6,8 @@ typedef struct vector
 {
     //int size;//表示记录的个数
     int index;
-    Val* var;
-    val* last;
+    VarObject* var;
+    VarObject* last;
     vector* next;
 }vector;
 
@@ -18,7 +18,7 @@ void FreeVector(vector* vt);
 void GetFirstItem(vector* vt){return vt->first;}
 void GetLastItem(vector* vt){return vt->last;}
 
-void AddItem(vector* vt, ValHashTable* item);
+void AddItem(vector* vt, VarObject* item);
 
 ValHashTable* GetItemByIndex(vector* vt, int index);
 
