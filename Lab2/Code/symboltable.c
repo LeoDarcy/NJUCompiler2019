@@ -69,7 +69,7 @@ void AddToValHashTable(ValHashTable* item)
 void AddToFuncHashTable(FuncHashTable* item)
 {
 	if(item == NULL) return;
-	unsigned int key = pjwhash(item->varobject->name);
+	unsigned int key = pjwhash(item->funcobject->name);
 	FuncHashTable* queue = ftable[key];
 	if(queue == NULL)
 		item->indexNext = NULL;
@@ -154,7 +154,7 @@ void AddToNameSpace(ValHashTable* item)
 	if(item == NULL) return;
 	NameSpace->size++;
 	item->fieldNext = NameSpace->items;
-	NameSpace->item = item;
+	NameSpace->items = item;
 }
 
 //将语句块中的变量名全部去掉
@@ -204,12 +204,12 @@ void ToolDeleteValHashTable(ValHashTable* item)
 	else
 	{
 		//不在第一个
-		while(queue != NULL && queue->next != item)
+		while(queue != NULL && queue->indexNext != item)
 		{
 			queue = queue->indexNext;
 		}
 		if(queue == NULL)
-			DebugAssert("Can't Find！Wrong in ToolDeleteValHashTable in symboltable.c")；
+			DebugAssert("Can't Find！Wrong in ToolDeleteValHashTable in symboltable.c");
 		queue->indexNext = item->indexNext;
 	}
 	DebugOutPut("Begin Delete ValHashTable!");

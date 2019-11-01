@@ -41,7 +41,7 @@ void AddItem(vector* vt, VarObject* item)
         nvt->var = item;
         nvt->index = last->index + 1;
         nvt->next = NULL;
-        nvt->last = nvt;
+        nvt->last = item;
 
         last->next = nvt;
         vt->last = item;

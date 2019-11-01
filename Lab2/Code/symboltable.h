@@ -1,27 +1,33 @@
+#pragma once 
 #ifndef SYMBOLTABLE_H
 #define STMBOLTABLE_H
-#include "vectorList.h"
+
 #include "mydebug.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-
+#include "vectorList.h"
 typedef struct Type_* Type;
 typedef struct FieldList_* FieldList;
-typedef struct VarObject VarObject;
-typedef struct FuncObject FuncObject;
-struct VarObject
+//struct VarObject VarObject;
+//struct FuncObject FuncObject;
+
+//struct vector;
+
+
+typedef struct VarObject
 {
 	char* name;// char name[33];
 	Type type;	// variable-type (pointer-level 1)
-};
-struct FuncObject
+}VarObject;
+
+typedef struct FuncObject
 {
 	char* name;
 	Type rtype;
-	vector* args;
-};
+	struct vector* args;
+}FuncObject;
 
 struct Type_
 {
@@ -54,7 +60,7 @@ struct FieldList_
 typedef struct ValHashTable
 {
 	int depth;
-	VarObject varobject;
+	VarObject* varobject;
 	// for linking
 	struct ValHashTable *indexNext;	// same index after hashing
 	struct ValHashTable *fieldNext;	// same field in the syntax tree
@@ -62,7 +68,7 @@ typedef struct ValHashTable
 
 typedef struct FuncHashTable
 {
-	FuncObject funcobject;
+	FuncObject* funcobject;
 	// for linking
 	struct FuncHashTable *indexNext;	// same index after hashing
 } FuncHashTable;
@@ -76,13 +82,13 @@ void initHashTable();
 
 void freeHashTable();
 
-void AddToValHashTable(VarObject* item);
+void AddToValHashTable(ValHashTable* item);
 
-void AddToFuncHashTable(FuncObject* item);
+void AddToFuncHashTable(FuncHashTable* item);
 
-bool CheckInValHashTable(char* name);
+VarObject* CheckInValHashTable(char* name, bool strict);
 
-bool CheckInFuncHashTable(char* name);
+FuncObject* CheckInFuncHashTable(char* name);
 
 unsigned int pjwhash(char *name);
 //namespace
@@ -109,6 +115,8 @@ void AddToNameSpace(ValHashTable* item);
 void FreeThisNameSpace();
 
 
+
+void initSymbolTable();
 
 //Tool工具，不重要可不看
 void ToolDeleteValHashTable(ValHashTable* item);
