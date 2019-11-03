@@ -1,10 +1,16 @@
 #include "vectorList.h"
 #include <malloc.h>
+#include <assert.h>
+void DebugAssert(char* a)
+{
+    printf("%s \n", a);
+    assert(1 == 2);
+}
 
 vector* CreateVector()
 {
     vector* p = (vector*)malloc(sizeof(vector));
-    p->var = NULL;
+    p->val = NULL;
     p->last = NULL;
     p->index = -1;
     return p;
@@ -21,7 +27,7 @@ void FreeVector(vector* vt)
     {
         vector* tmp = vt;
         vt = vt->next;
-        ToolFreeVarObject(tmp->var);
+        ToolFreeVarObject(tmp->val);
         free(tmp);
     }
 }
@@ -31,14 +37,14 @@ void AddItem(vector* vt, VarObject* item)
     if(vt->index < 0)
     {
         vt->index = 0;
-        vt->var = item;
+        vt->val = item;
         vt->last = item;
     }
     else
     {
         vector* last = vt->last;
         vector* nvt = (vector*)malloc(sizeof(vector));
-        nvt->var = item;
+        nvt->val = item;
         nvt->index = last->index + 1;
         nvt->next = NULL;
         nvt->last = item;
@@ -57,7 +63,7 @@ VarObject* GetItemByIndex(vector* vt, int index)
     }
     if(vt == NULL)
         DebugAssert("Wrong in GetItemByIndex in vectorList.h");
-    return vt->var;
+    return vt->val;
 }
 
 bool RemoveItemByIndex(vector* vt, int index)
@@ -76,7 +82,8 @@ bool RemoveItemByIndex(vector* vt, int index)
     }
     else
     {
-        /*ValHashTable* before = vt->first;
+        /*
+	ValHashTable* before = vt->first;
         ValHashTable* current = before->indexNext;
         for(int i = 1; i < index; i++)
         {
@@ -88,7 +95,7 @@ bool RemoveItemByIndex(vector* vt, int index)
         {
             vt->last = before;
         }
-        free(p);*/
+        free(p);//**/
     }
     return true;
 }

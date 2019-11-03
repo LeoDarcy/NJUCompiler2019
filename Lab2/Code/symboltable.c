@@ -1,4 +1,12 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+
 #include"symboltable.h"
+
+ValHashTable* vtable[tsize];
+FuncHashTable* ftable[tsize];
 
 void initSymbolTable()
 {
@@ -49,13 +57,12 @@ unsigned int pjwhash(char *name)
 void AddToValHashTable(ValHashTable* item)
 {
 	if(item == NULL) return;
-	unsigned int key = pjwhash(item->varobject->name);
+	unsigned int key = pjwhash(item->val->name);
 	ValHashTable* queue = vtable[key];
 	if(queue == NULL)
 	{
 		//插入的位置目前还没有
 		item->indexNext = NULL; 
-
 	}
 	else
 	{
@@ -69,7 +76,7 @@ void AddToValHashTable(ValHashTable* item)
 void AddToFuncHashTable(FuncHashTable* item)
 {
 	if(item == NULL) return;
-	unsigned int key = pjwhash(item->funcobject->name);
+	unsigned int key = pjwhash(item->func->name);
 	FuncHashTable* queue = ftable[key];
 	if(queue == NULL)
 		item->indexNext = NULL;
@@ -79,7 +86,7 @@ void AddToFuncHashTable(FuncHashTable* item)
 	}
 	ftable[key] = item;
 }
-//检查是否符号表中已经有了这个变量,strict表示严格要求匹配当前深度 return NULL表示没找到
+//检查是否符号表中已经有了这个变量,true用于定义位置检查，false用于使用位置检查； return NULL表示没找到
 VarObject* CheckInValHashTable(char* name, bool strict)
 {
 	unsigned int key = pjwhash(name);
@@ -88,19 +95,20 @@ VarObject* CheckInValHashTable(char* name, bool strict)
 		return NULL;
 	while(queue != NULL)
 	{
-		char* find = queue->varobject->name;
+		char* find = queue->val->name;
 		if(strcmp(name, find) == 0)
 		{
 			if(strict)
 			{
+				//printf("depth:%d, CurDept:%d\n",queue->depth, CurrentDept);
 				if(queue->depth == CurrentDept)
-					return queue->varobject;
+					return queue->val;
 				else
 					return NULL;
 			}
 			else
 			{
-				return queue->varobject;
+				return queue->val;
 			}
 		}
 		queue = queue->indexNext;
@@ -111,21 +119,20 @@ VarObject* CheckInValHashTable(char* name, bool strict)
 FuncObject* CheckInFuncHashTable(char* name)
 {
 	unsigned int key = pjwhash(name);
-	FuncHashTable* queue = vtable[key];
+	FuncHashTable* queue = ftable[key];
 	if(queue == NULL)
 		return NULL;
 	while(queue != NULL)
 	{
-		char* find = queue->funcobject->name;
+		char* find = queue->func->name;
 		if(strcmp(name, find) == 0)
 		{
-			return queue->funcobject;
+			return queue->func;
 		}
 		queue = queue->indexNext;
 	}
 	return NULL;
 }
-
 
 void initNameSpace()
 {
@@ -149,6 +156,7 @@ void CreateNewSpace()
 	newSpace->next = NameSpace;
 	NameSpace = newSpace;
 }
+
 void AddToNameSpace(ValHashTable* item)
 {
 	if(item == NULL) return;
@@ -162,7 +170,7 @@ void AddToNameSpace(ValHashTable* item)
 void FreeThisNameSpace()
 {
 	if(CurrentDept == 0)
-		DebugAssert("Wrong! delete the first namespace in FreeThisNameSpace in symboltable.c");
+		return;//printf("Wrong! delete the first namespace in FreeThisNameSpace in symboltable.c\n");
 
 	NameFieldStruct* p = NameSpace;
 	NameSpace = NameSpace->next;
@@ -176,11 +184,13 @@ void FreeThisNameSpace()
 	free(p);
 	CurrentDept--;
 }
+
 void AddToSymbolTable(VarObject* item)
 {
 	if(item == NULL) return;
 	ValHashTable* table_item = (ValHashTable*)malloc(sizeof(ValHashTable));
-	table_item->varobject = item;
+	table_item->val = item;
+	table_item->depth = CurrentDept;
 	AddToValHashTable(table_item);
 	AddToNameSpace(table_item);
 }
@@ -191,14 +201,14 @@ void AddToSymbolTable(VarObject* item)
 ////Tool开头是工具
 void ToolDeleteValHashTable(ValHashTable* item)
 {
-	char* name = item->varobject->name;
+	char* name = item->val->name;
 	unsigned int key = pjwhash(name);
 	ValHashTable*queue = vtable[key];
 	if(queue == item)
 	{
 		//第一个
 		if(CurrentDept != item->depth)
-			DebugAssert("Wrong in ToolDeleteValHashTable in symboltable.c");
+			return;//;printf("Wrong in ToolDeleteValHashTable in symboltable.c");
 		vtable[key] = NULL;
 	}
 	else
@@ -209,20 +219,13 @@ void ToolDeleteValHashTable(ValHashTable* item)
 			queue = queue->indexNext;
 		}
 		if(queue == NULL)
-			DebugAssert("Can't Find！Wrong in ToolDeleteValHashTable in symboltable.c");
+			return;//printf("Can't Find！Wrong in ToolDeleteValHashTable in symboltable.c");
 		queue->indexNext = item->indexNext;
 	}
-	DebugOutPut("Begin Delete ValHashTable!");
+	//printf("Begin Delete ValHashTable!");
 
 }
-void ToolFreeVarObject(VarObject*item)
-{
-	//主要释放type类型
-	Type type = item->type;
-	char* name = item->type;
-	free(name);
-	free(type);
-}
+
 void ToolFreeType(Type type)
 {
 	switch (type->kind)
@@ -237,18 +240,20 @@ void ToolFreeType(Type type)
 		{ToolFreeFieldList(type->u.structure); free(type);}
 		break;
 	default:
-		DebugAssert("Wrong in FreeType in symboltable.c");
+		return;//printf("Wrong in FreeType in symboltable.c");
 		break;
 	}
 }
+
 void ToolFreeFieldList(FieldList flist)
 {
 	Type type = flist->type;
-	char* name = flist->type;
+	char* name = flist->name;
 	free(name);
 	free(type);
 	ToolFreeFieldList(flist->tail);
 }
+
 void ToolFreeVarObject(VarObject* item)
 {
 	char*name = item->name;

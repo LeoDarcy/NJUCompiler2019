@@ -2,7 +2,6 @@
 #ifndef SYMBOLTABLE_H
 #define STMBOLTABLE_H
 
-#include "mydebug.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -10,26 +9,23 @@
 #include "vectorList.h"
 typedef struct Type_* Type;
 typedef struct FieldList_* FieldList;
-//struct VarObject VarObject;
-//struct FuncObject FuncObject;
-
-//struct vector;
-
 
 typedef struct VarObject
 {
-	char* name;// char name[33];
-	Type type;	// variable-type (pointer-level 1)
-}VarObject;
+	char* name;
+	Type type; // variable-type (pointer-level 1)
+	bool lvalue;
+} VarObject;
 
 typedef struct FuncObject
 {
 	char* name;
-	Type rtype;
+	Type rtype; // function-return type (pointer-level 1)
+	// for parameter, name isn't important
 	struct vector* args;
-}FuncObject;
+} FuncObject;
 
-struct Type_
+typedef struct Type_
 {
 	enum { BASIC, ARRAY, STRUCTURE } kind;
 	union
@@ -39,28 +35,29 @@ struct Type_
 		// ARRAY
 		struct { Type elem; int size; } array;
 		// STRUCTURE
-		FieldList structure; 
+		FieldList structure;
 	} u;
+	//record value of a variable
 	/*union
 	{
-		int intvalue;
-		int floatvalue;
-		int* intarray;
-		float* floatarray;
-	}value;*/
-};
+		int intValue;
+		float floatValue;
+		int* intArray;
+		float* floatArray;
+	} value;*/
+}Type_;
 
-struct FieldList_
+typedef struct FieldList_
 {
 	char *name;	// name of the field
 	Type type;	// type of the field
 	FieldList tail;	// next field
-};
+}FieldList_;
 
 typedef struct ValHashTable
 {
 	int depth;
-	VarObject* varobject;
+	VarObject* val;
 	// for linking
 	struct ValHashTable *indexNext;	// same index after hashing
 	struct ValHashTable *fieldNext;	// same field in the syntax tree
@@ -68,29 +65,24 @@ typedef struct ValHashTable
 
 typedef struct FuncHashTable
 {
-	FuncObject* funcobject;
+	FuncObject* func;
 	// for linking
 	struct FuncHashTable *indexNext;	// same index after hashing
 } FuncHashTable;
 
-#define tsize 16384
 
-ValHashTable* vtable[tsize];
-FuncHashTable* ftable[tsize];
+#define tsize 16384
+extern ValHashTable* vtable[tsize];
+extern FuncHashTable* ftable[tsize];
 
 void initHashTable();
-
 void freeHashTable();
-
 void AddToValHashTable(ValHashTable* item);
-
 void AddToFuncHashTable(FuncHashTable* item);
-
 VarObject* CheckInValHashTable(char* name, bool strict);
-
 FuncObject* CheckInFuncHashTable(char* name);
-
 unsigned int pjwhash(char *name);
+
 //namespace
 typedef struct NameFieldStruct NameFieldStruct;
 typedef struct NameFieldStruct 
@@ -99,9 +91,9 @@ typedef struct NameFieldStruct
 	int size;
 	ValHashTable*items;
 	NameFieldStruct* next;
-}namesfield;
+} namesfield;
 
-//这里负责有关命名空间的处理。
+//这里负责有关命名空间的处理
 //作用域
 NameFieldStruct* NameSpace;
 unsigned int CurrentDept;
@@ -110,18 +102,19 @@ void initNameSpace();
 //展开新的作用域
 void CreateNewSpace();
 //和加入符号表结合使用
-void AddToNameSpace(ValHashTable* item);
+void AddToSymbolTable(VarObject* item);
 //将语句块中的变量名全部去掉
 void FreeThisNameSpace();
-
-
-
 void initSymbolTable();
+
 
 //Tool工具，不重要可不看
 void ToolDeleteValHashTable(ValHashTable* item);
-void ToolFreeValHashTable(ValHashTable*item);
+//void ToolFreeValHashTable(ValHashTable*item);
 void ToolFreeType(Type type);
 void ToolFreeFieldList(FieldList flist);
 void ToolFreeVarObject(VarObject* item);
+
 #endif
+
+

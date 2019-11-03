@@ -1,15 +1,116 @@
 #include "tree.h"
 #include "semantic.h"
-#include "vectorList.h"
 #include <assert.h>
 
+#define Length 40
 
-void semanticAnalyse(TreeNode* root)
+Type newType()
 {
-	initHashTable();
-	traverseTree(root);
+	Type type = (Type)malloc(sizeof(Type_));
+	return type;
 }
 
+VarObject* newVar(bool lv)
+{
+	VarObject* var = (VarObject*)malloc(sizeof(VarObject));
+	var->type = newType();
+	var->lvalue = lv;
+	return var;
+}
+
+FuncObject* newFunc()
+{
+	FuncObject* func = (FuncObject*)malloc(sizeof(FuncObject));
+	func->rtype = newType();
+	return func;
+}
+
+bool typeEqual(Type t1, Type t2)
+{
+	int nonequal = 0;
+	if (t1->kind != t2->kind)
+		nonequal = 1;
+	else//进一步确定是否一致
+	{
+		switch (t1->kind)
+		{
+		case BASIC://可以写函数来判断
+		{
+			if (t1->u.basic != t2->u.basic)
+				nonequal = 1;
+		}break;
+		case ARRAY:
+		{
+			//判断维度和最后的类型是否同
+			int dim1 = 0, dim2 = 0;
+			//p1与p2while循环结束后指示最后的类型
+			Type p1 = t1, p2 = t2;
+			while (p1->kind == ARRAY)
+			{
+				dim1 += 1;
+				p1 = p1->u.array.elem;
+			}
+			while (p2->kind == ARRAY)
+			{
+				dim2 += 1;
+				p2 = p2->u.array.elem;
+			}
+			if (dim1 != dim2) nonequal = 1;
+			else
+			{
+				bool equal = typeEqual(p1, p2);
+				if (!equal) nonequal = 1;
+			}
+		}break;
+		case STRUCTURE:
+		{
+			if (strcmp(t1->u.structure->name, t2->u.structure->name) != 0)//名等价
+				nonequal = 1;
+		}break;
+		default:break;
+		}
+	}
+	if (nonequal == 1) return false;
+	else return true;
+}
+
+VarObject* newVarObject(int kind)
+{
+	VarObject* newone = (VarObject*)malloc(sizeof(VarObject));
+	newone->name = NULL;   //没名字
+	newone->type = (Type)malloc(sizeof(Type_));
+	switch (kind)
+	{
+	case 0: { newone->type->kind = BASIC; }break;
+	case 1: { newone->type->kind = ARRAY; }break;
+	case 2: { newone->type->kind = STRUCTURE; }break;
+	default: break;
+	}
+	return newone;
+}
+
+Type CheckInStructure(Type st, char* name)
+{
+	if (st->kind != STRUCTURE) return NULL;
+	FieldList field = st->u.structure->type->u.structure;
+	while (field)
+	{
+		if (strcmp(name, field->name) == 0)
+			return field->type;
+		field = field->tail;
+	}
+	return NULL;
+}
+
+
+//int globalDepth = 0;
+//FieldList structure中的structure需要提前分配空间
+
+void traverseTree(TreeNode* root)
+{
+	initSymbolTable();
+	Program(root);
+}
 
 void ErrorGenerator(char* str)
 {
@@ -18,111 +119,181 @@ void ErrorGenerator(char* str)
 }
 
 /*(1) High-level Definitions*/
-void Program(TreeNode* root)
+void Program(TreeNode* root) //Done
 {
-	if(root==NULL)	return;
+	if (root == NULL)	return;
 	ExtDefList(root->firstChild);
 }
 
-void ExtDefList(TreeNode* p)
+void ExtDefList(TreeNode* p) //Done
 {
-	if(p == NULL)	return;
+	if (p == NULL)	return;
 	ExtDef(p->firstChild);
-	if(p->lastChild != NULL)
-		ExtDefList(p->lastChild);
+	ExtDefList(p->firstChild->next);
 }
 
-void ExtDef(TreeNode* p)
+void ExtDef(TreeNode* p) //not Done-> the last "CompSt(q->next->next);"
 {
-	if(p == NULL)	return;
+	if (p == NULL)	return;
 	TreeNode* q = p->firstChild;
-	if(!q || q->nodetype == TYPE_Specifier) return; //the first must be "Specifier"
-	Type specifier_type= Specifier(q);
+	if (!q || q->nodetype != TYPE_Specifier) return; //the first must be "Specifier"
+
+	Type specifier = Specifier(q);
+	//CreateVector  头指针
+	//vector *extdeclist = (vector*)malloc(sizeof(vector));	
+	//extdeclist->val = NULL;
+	//extdeclist->next = NULL;
+	//extdeclist->last = extdeclist;
 	
-	if(q->next && q->next->nodetype == TYPE_ExtDecList)
-		ExtDecList(q->next, specifier_type);
-	else if(q->next && q->next->nodetype == TYPE_FuncDec)
+	//take place
+
+	vector *extdeclist = CreateVector();
+	//extdeclist->index = -1;
+
+	FuncObject *fundec = NULL;
+	if (q->next && q->next->nodetype == TYPE_ExtDecList)
 	{
-		//in FuncDec, add the Func into symbol table
-		FunDec(q->next, specifier_type);
-		if(!q->next->next || q->next->next->nodetype == TYPE_CompSt)	
-		{
-			ErrorGenerator("wrong in ExtDef -> Specifier FunDec ??wrong tye");
-			return;
-		}
-		CompSt(q->next->next);
+		ExtDecList(q->next, specifier, extdeclist);//此处extdeclist作用不大
+		//此情况若specifier为结构体，OptTag可以为NULL
 	}
+	else if (q->next && q->next->nodetype == TOKEN_SEMI)
+	{
+		;//结构体，为StructSpecifier的返回在创建时已经插入vtable；对于"int;" "float;"不需要额外处理
+	}
+	else if (q->next && q->next->nodetype == TYPE_FuncDec)
+	{
+		fundec = (FuncObject*)malloc(sizeof(FuncObject));
+		fundec->rtype = specifier;
+		fundec->args = (vector*)malloc(sizeof(vector));
+		fundec->args->val = NULL;
+		fundec->args->next = NULL;
+		fundec->args->last = fundec->args;
+		FunDec(q->next, fundec);
+		if (fundec->args != NULL)//若重复定义，则会将fundec->args置NULL
+		{
+			FuncHashTable* fitem = (FuncHashTable*)malloc(sizeof(FuncHashTable));
+			fitem->func = fundec;//!会不会有指针副作用
+			fitem->indexNext = NULL;
+			AddToFuncHashTable(fitem);//insert
+		}
+		else
+			return;
+		if (!q->next->next || q->next->next->nodetype != TYPE_CompSt)	return;
+		CompSt(q->next->next, specifier);//注意globalDepth的变化，遇到LC则+1,遇到RC则-1，并删除; specifier--rtype
+	}
+
 	return;
 }
 
-void ExtDecList(TreeNode* p, Type specifier)
+void ExtDecList(TreeNode* p, Type specifier, vector *extdeclist)//Done
 {
-	if(p == NULL) return;
+	if (p == NULL) return;
 	TreeNode* child = p->firstChild;
-	if(child == NULL)
+	if (child == NULL)
 	{
 		ErrorGenerator("Find ExtDecList -> NULL");
 	}
-	if(child->nodetype == TYPE_VarDec)
+	if (child->nodetype == TYPE_VarDec)
 	{
+		Type Array = NULL;//用于判断VarDec层，是否第一个便为ID；否则需按照数组处理
 		//ExtDecList -> VarDec ExtDecList, and check VarDec all in symbol table
-		VarDec(child, specifier, true);//true表示需要加入符号表中
+		VarDec(child, specifier, extdeclist, Array, NULL);
 	}
 	//if ExtDecList-> VarDec COMMA ExtDecList
-	if(p->lastChild != NULL && p->lastChild->nodetype == TYPE_VarList)
-		ExtDecList(p->lastChild, specifier);
+	if (p->lastChild != NULL && p->lastChild->nodetype == TYPE_ExtDecList)
+		ExtDecList(p->lastChild, specifier, extdeclist);
 }
 
-/*(2) Specifiers*/
-Type Specifier(TreeNode* p)
+
+/*(2) Specifiers*/  //
+Type Specifier(TreeNode* p)//Done
 {
-	if(p == NULL) return NULL;
-	TreeNode* q=p->firstChild;
-	if(q && q->nodetype == TOKEN_TYPE)
+	if (p == NULL) return NULL;
+	TreeNode* q = p->firstChild;
+	if (q && q->nodetype == TOKEN_TYPE)
 	{
-		Type type=(Type)malloc(sizeof(Type));
-		type->kind=BASIC;
-		if(strcmp(q->value,"int")==0)
-			type->u.basic=0;
+		Type type = (Type)malloc(sizeof(Type_));
+		type->kind = BASIC;
+		if (strcmp(q->value, "int") == 0)
+			type->u.basic = 0;
 		else
-			type->u.basic=1;
+			type->u.basic = 1;
 		return type;
 	}
-	else if(q && strcmp(q->name,"StructSpecifier")==0)
+	else if (q && q->nodetype == TYPE_StructSpecifier)
 	{
-		return StructSpecifier(q);	
+		return StructSpecifier(q);
 	}
 }
 
-Type StructSpecifier(TreeNode* p)
+Type StructSpecifier(TreeNode* p)//Done
 {
-	if(p==NULL) return NULL;
-	TreeNode* q=p->firstChild;
-	if(!q || strcmp(q->name,"STRUCT")!=0) return NULL;
-	if(q->next && strcmp(q->next->name,"OptTag")==0) //definition, insert
+	if (p == NULL) return NULL;
+	TreeNode* q = p->firstChild;
+	if (!q || q->nodetype != TOKEN_STRUCT) return NULL;
+	if (q->next && q->next->nodetype != TYPE_Tag)
 	{
-		Type type=(Type)malloc(sizeof(Type));
-		type->kind=STRUCTURE;
-		char name[33]="";
-		if(q->next->firstChild!=NULL)//firstChild could be empty
-			strcpy(name,q->next->firstChild->value);
-
-		if(!q->next->next || strcmp(q->next->next->name,"LC")!=0)	return NULL;
-		TreeNode* r=q->next->next->next;
-		if(r && strcmp(r->name,"DefList")==0)
-			//type = DefList(r, type);段大哥这一句参数和返回值不统一，你可以把我的参数改一改
-			;
+		FieldList st = (FieldList)malloc(sizeof(FieldList_));
+		TreeNode* r = NULL;
+		if (q->next->nodetype == TYPE_OptTag)
+		{
+			VarObject* vexist = CheckInValHashTable(q->next->firstChild->value, true);
+			//FuncObject* fexist = CheckInFuncHashTable(q->next->firstChild->value);
+			if (vexist == NULL)
+			{
+				st->name = (char*)malloc(Length * sizeof(char));
+				strcpy(st->name, q->next->firstChild->value);//将OptTag的ID赋给结构体名称
+				if (!q->next->next || q->next->next->nodetype != TOKEN_LC)	return NULL;
+				r = q->next->next->next;
+			}
+			else
+			{
+				//报错重复定义;return NULL ? 还是return哈希表中已有的类型
+				printf("Error type %d at Line %d: Redefined structure \"%s\".\n", 16, q->next->firstChild->line, q->next->firstChild->value);
+				return newType();
+			}
+		}
+		else if (q->next->nodetype == TOKEN_LC)//TYPE_OptTag可以为空，则q->next->nodetype=TOKEN_LC，此时结构体没有名称；则大概率后面为ExtDecList
+		{
+			st->name = NULL;
+			r = q->next->next;
+		}
+		//经过上述语句，表明已经遇到一个{： 
+		//globalDepth += 1;
+		CreateNewSpace();
+		if (r && r->nodetype == TYPE_DefList)//DefList可能为空 
+		{
+			st->type == NULL;
+			DefList(r, st);	//st为结构体的头
+		}
 		//if(!r->next || strcmp(r->next->name,"RC")!=0)	return NULL;
+		//表明已经遇到一个}： 
+		//globalDepth -= 1;
+		FreeThisNameSpace();
+
+		Type type = (Type)malloc(sizeof(Type_));
+		type->kind = STRUCTURE;
+		type->u.structure = st;
+
+		VarObject* val = (VarObject*)malloc(sizeof(VarObject));
+		val->name = (char*)malloc(Length * sizeof(char));
+		strcpy(val->name, type->u.structure->name);//赋值结构体名称；则判断结构体是否相同时--名等价
+		val->type = type;
+		AddToSymbolTable(val);//将结构体插入vtable
 		return type;
 	}
-	else if(q->next && strcmp(q->next->name,"Tag")==0) //define variables WITH the defined structure, find
+	else if (q->next && q->next->nodetype == TYPE_Tag) //define variables WITH the defined structure, find
 	{
-		char name[33];
-		strcpy(name,q->next->firstChild->value);
-		Type type= "find type with the name in the vtable";
-		return type; 
+		//"find type with the name in the vtable"; check error 17
+		VarObject* structure = CheckInValHashTable(q->next->firstChild->value, false);//strict先赋值false
+		if (structure == NULL)
+		{
+			//报错结构体未定义
+			printf("Error type %d at Line %d: Undefined structure \"%s\".\n", 17, q->next->firstChild->line, q->next->firstChild->value);
+			return newType();
+		}
+		return structure->type;
 	}
-	
 }
 
 
@@ -130,393 +301,672 @@ Type StructSpecifier(TreeNode* p)
 
 //TODO：传入变量类型，向符号表中加入该变量
 //注意这里的VarDec有可能是需要加入，有可能是不用加入而是需要检测的
-//总结来说这个实现的是关于VarDec的自动检测加入或自动报错
-void VarDec(TreeNode* p, ValHashTable* item, bool needtoAdd)
+//总结来说这个实现的是关于VarDec的自动检测加入或自动报错  
+void VarDec(TreeNode* p, Type specifier, vector *list, Type Array, FieldList st)//VarDec表示对一个变量的定义,不用考虑index问题 //Done
 {
-	if(p == NULL) return NULL;
+	if (p == NULL) return;
 	TreeNode* q = p->firstChild;
-	if(q == NULL) return NULL;
-	if(q->nodetype == TOKEN_ID)
+	if (q == NULL) return;
+	if (q->nodetype == TOKEN_ID)
 	{
 		//TODO: check TOKEN_ID is in symbol table
 		//Add or report error
-		//如果是用于函数参数的话不用考虑重定义的问题，直接就可以了
-		if(needtoAdd)
+		//首先check 该变量在同一深度是否已经存在，错误3
+		if(specifier->kind==STRUCTURE)//针对A_3.cmm的解读
+			;
+		VarObject* vexist = CheckInValHashTable(q->value, true);
+		//FuncObject* fexist = CheckInFuncHashTable(q->value);
+		if (vexist == NULL)
 		{
-			//check symbol table
+			//如果不存在错误，则
+			/*
+			vector* vardec = (vector*)malloc(sizeof(vector));
+			vardec->val = (VarObject*)malloc(sizeof(VarObject));
+			vardec->val->name = (char*)malloc(Length * sizeof(char));
+			strcpy(vardec->val->name, q->value);
+			vardec->next = vardec->last = NULL;
+			if (Array == NULL)//not array
+				vardec->val->type = specifier;
+			else
+				vardec->val->type = Array;
+			//插入 list
+			list->last->next = vardec;
+			list->last = vardec;
+			
+			AddToSymbolTable(vardec->val);
+			if (st != NULL)
+			{
+				FieldList field = (FieldList)malloc(sizeof(FieldList_));
+				field->name = (char*)malloc(Length * sizeof(char));
+				strcpy(field->name, vardec->val->name);
+				field->type = vardec->val->type;
+				field->tail = NULL;
+				if (st->type == NULL)
+				{
+					st->type = (Type)malloc(sizeof(Type_));
+					st->type->kind = STRUCTURE;
+					st->type->u.structure = field;
+				}
+				else
+				{
+					FieldList f = st->type->u.structure;
+					while (f->tail) f = f->tail;
+					f->tail = field;
+				}
+			}*/
+			//代替
+			VarObject* vardec=(VarObject*)malloc(sizeof(VarObject));
+			vardec->name=(char*)malloc(Length*sizeof(char));
+			strcpy(vardec->name,q->value);
+			if(Array==NULL)//not array
+			{
+				vardec->type=specifier;
+				//DebugOutPut("Finish 变量 in VarDec");
+			}
+			else
+			{
+				//ArrayNext=specifier;
+				vardec->type=Array;
+				//DebugOutPut("Finish 数组 in VarDec");
+			}
+			//插入 list
+			AddItem(list, vardec);
+			AddToSymbolTable(vardec);
+			if (st != NULL)
+			{
+				FieldList field = (FieldList)malloc(sizeof(FieldList_));
+				field->name = (char*)malloc(Length * sizeof(char));
+				strcpy(field->name, vardec->name);
+				field->type = vardec->type;
+				field->tail = NULL;
+				if (st->type == NULL)
+				{
+					st->type = (Type)malloc(sizeof(Type_));
+					st->type->kind = STRUCTURE;
+					st->type->u.structure = field;
+				}
+				else
+				{
+					FieldList f = st->type->u.structure;
+					while (f->tail) f = f->tail;
+					f->tail = field;
+				}
+			}
 		}
 		else
 		{
-			item->name = q->name;
+			//报错重复定义	,可以return
+			if (st == NULL)
+				printf("Error type %d at Line %d: Redefined variable \"%s\".\n", 3, q->line, q->value);
+			else
+				printf("Error type %d at Line %d: Redefined field \"%s\".\n", 15, q->line, q->value);
 			return;
 		}
-		
 	}
-	else if(q->nodetype == TYPE_VarDec)
+	else if (q->nodetype == TYPE_VarDec)//类似于数组类型的处理
 	{
-		//VarDec(q);
-		//类似于数组类型的处理，最后根据needtoADD判断是否要加入到符号表中，
-		//这里可能出现错误10，非数组元素使用[]来访问
-		if(needtoAdd)
+		//这里可能出现错误 12
+		if (q->next->next->nodetype != TOKEN_INT)
 		{
-			//check
+			//报错12
+			printf("Error type %d at Line %d: \"%s\" is not an integer.\n", 12, q->next->next->line, q->next->next->value);
+			return;
+		}
+		//如果不存在错误，则	
+		int size = atoi(q->next->next->value);
+		if (Array == NULL)
+		{
+			Array = (Type)malloc(sizeof(Type_));
+			Array->kind = ARRAY;
+			Array->u.array.size = size;
+			Array->u.array.elem = specifier;
+			VarDec(q, specifier, list, Array, st);
 		}
 		else
 		{
-			item->type->u.array.elem = item->type;//考虑变成数组
-			item->type->u.array.size = atoi(q->next->value);//得到数组长度
-			item->type->kind = STRUCTURE;//修改成数组类型
+			Type prior = (Type)malloc(sizeof(Type_));
+			prior->kind = ARRAY;
+			prior->u.array.size = size;
+			prior->u.array.elem = Array;
+			VarDec(q, specifier, list, prior, st);
 		}
-		
 	}
 	else
 	{
-		ErrorGenerator("error VarDec-> ??\n");
+		ErrorGenerator("error VarDec-> ?\n");
 	}
-	
+
 }
-//功能：传参是函数返回类型和指针，将这个函数声明加入到符号表中。
-void FunDec(TreeNode* p, Type Specifier)
+//功能：将这个函数声明加入到符号表中。
+void FunDec(TreeNode* p, FuncObject *fundec)//Done
 {
-	if(p == NULL) return;
-	TreeNode* func_name = p->firstChild;
-	if(func_name == NULL)
+	if (p == NULL) return;
+	TreeNode* funcName = p->firstChild;
+	if (funcName == NULL)
 	{
 		ErrorGenerator("Wrong in FunDec! No children!");
 		return;
 	}
-	TreeNode* func_vars = func_name->next->next;
-	if(func_vars->nodetype == TOKEN_RP)
+	fundec->name = (char*)malloc(Length * sizeof(char));
+	strcpy(fundec->name, funcName->value);//确定函数名
+	//VarObject* vexist=CheckInValHashTable(funcName->value, false);
+	FuncObject* fexist = CheckInFuncHashTable(funcName->value);
+	if (fexist != NULL)
 	{
-		//说明没有参数
-		//TODO 知道了返回值和函数名，加入符号表中
-		//TODO：判断是否出现错误类型4，函数重复定义
-
+		//报错重复定义  函数重复定义；那与变量重复？<不会出现>
+		printf("Error type %d at Line %d: Redefined function \"%s\".\n", 4, funcName->line, funcName->value);
+		free(fundec->args);
+		fundec->args = NULL;
+		return;
 	}
-	else
+	TreeNode* funcVars = funcName->next->next;
+	if (funcVars->nodetype == TYPE_VarList)
 	{
 		//说明出现多个参数，将加入符号表的功能要求在VarList中实现
-		//在VarList中传入一个vector列表引用，每个元素是一个参数，包含了类型信息
-		vector* vars = NULL;
-		VarList(func_vars, vars);
-		//TODO: 和上面if一样，加入符号表
+		int index = 1; //!
+		VarList(funcVars, fundec, index);
+		//需要将函数形参列表插入哈希表？  需要！
 	}
 }
 
-//实现功能：填充参数列表,这里的Varist表示的只是参数，所以不需要考虑名字
-void VarList(TreeNode* p, vector* vars)
+//实现功能：填充参数列表
+void VarList(TreeNode* p, FuncObject *fundec, int index)//Done
 {
-	if(p == NULL) return;
-	if(p->firstChild == p->lastChild)
+	if (p == NULL) return;
+	if (p->firstChild == p->lastChild)
 	{
 		//说明是Varist->ParamDec
-		ParamDec(p->firstChild, vars);
+		ParamDec(p->firstChild, fundec->args, index);
 	}
 	else
 	{
 		//说明是VarList->ParamDec COMMA VarList
-		ParamDec(p->firstChild, vars);
-		VarList(p->lastChild, vars);
+		ParamDec(p->firstChild, fundec->args, index);
+		VarList(p->lastChild, fundec, index + 1);
 	}
-	
+
 }
 
-void ParamDec(TreeNode* p, vector* vars)
+void ParamDec(TreeNode* p, vector *vars, int index)//Done
 {
-	if(p == NULL) return;
+	if (p == NULL) return;
 	//TODO:将参数填入vector中
 	//主要保存参数的类型，可以不用调用VarDec
 	Type specifier = Specifier(p->firstChild);
-	ValHashTable* var = (ValHashTable*)malloc(sizeof(ValHashTable));
-	var->type = specifier;
-	VarDec(p->lastChild, var, false);//不用加入符号表，只是解析得到var
-	//加入参数列表
-	AddItem(vars, var);
+	Type Array = NULL; // 对于函数参数为 int[][]? 按语法表应该是不会出现
+	VarDec(p->lastChild, specifier, vars, Array, NULL);
+	vars->last->index = index;//对于函数参数：每次都是 单个Specifier + 单个VarDec
 }
+
+
 /*(4) Statements*/
 //TODO：在函数块中的{}包围部分，需要考虑作用域的问题
-void CompSt(TreeNode* p)
+void CompSt(TreeNode* p, Type rtype)
 {
-	if(p == NULL) return;
+	if (p == NULL) return;
 	//初步想法：有记录作用域的栈，这个记录作用域的为全局变量，在{}中的作用域就push到最上面
 	//这期间调用VarDec之类新加的局部变量都挂在这个作用域上，和书上的图一样
-	TreeNode* def_list = p->firstChild->next;
-	TreeNode* stmt_list = def_list->next;
-
-	DefList(def_list);
-	//这里的stmt_list可能为空
-	if(stmt_list->nodetype == TYPE_StmtList)
+	TreeNode* q = p->firstChild;
+	if (q && q->nodetype == TOKEN_LC)
+		CreateNewSpace();// globalDepth += 1;
+	if (q->next && q->next->nodetype == TYPE_DefList)
 	{
-		//说明stmt_list不为空
-		StmtList(stmt_list);
+		DefList(q->next, NULL);//不是从结构体进入DefList
+		TreeNode* stmtList = q->next->next;
+		if (stmtList && stmtList->nodetype == TYPE_StmtList)
+			StmtList(stmtList, rtype);
 	}
+	else if (q->next && q->next->nodetype == TYPE_StmtList)
+		StmtList(q->next, rtype);
+
+	if (p->lastChild && p->lastChild->nodetype == TOKEN_RC)
+		FreeThisNameSpace();// globalDepth -= 1;
 
 	//TODO：在结束是释放局部变量，pop作用域栈
 }
 
-void StmtList(TreeNode* p)
+void StmtList(TreeNode* p, Type rtype)
 {
-	if(p == NULL) return;
-	Stmt(p->firstChild);
-	if(p->firstChild == p->lastChild)
-	{
-		;//说明Stmt:ist->Stmt
-	}
-	else
-	{
-		//说明Stmt:ist->Stmt StmtList
-		StmtList(p->lastChild);
-	}
-	
+	if (p == NULL) return;
+	Stmt(p->firstChild, rtype);
+	StmtList(p->firstChild->next, rtype);//为null则表明StmtList->Stmt
 }
 
-void Stmt(TreeNode* p)
+void Stmt(TreeNode* p, Type rtype)
 {
-	if(p == NULL) return;
-	TreeNode* child = p->firstChild;
-	switch (child->nodetype)
+	if (p == NULL) return;
+	TreeNode* q = p->firstChild;
+	VarObject* exp = NULL;
+	switch (q->nodetype)
 	{
 	case TYPE_Exp:
-		/* code */
-		break;
+	{
+		exp = Exp(q);
+	}
+	break;
 	case TYPE_CompSt:
-		{CompSt(child);}
-		break;
-	case TOKEN_RETURN:{/*检查有关return返回值的问题？作用域栈也要保存返回值*/} 
-		break;
-	case TOKEN_IF:{/*检查有关if的问题？作用域栈也要保存返回值*/} 
-		break;
-	case TOKEN_WHILE:{/*检查有关while的问题？作用域栈也要保存返回值*/} 
-		break;
+	{
+		CompSt(q, rtype);//语句块没有返回值类型
+	}
+	break;
+	case TOKEN_RETURN:
+	{/*检查有关return返回值的问题？作用域栈也要保存返回值*/
+		exp = Exp(q->next);//获得返回的表达式的值，判断类型是否符合rtype
+		bool equal = typeEqual(exp->type, rtype);
+		if (!equal)
+		{
+			printf("Error type %d at Line %d: Type mismatched for return.\n", 8, q->line);
+			return;
+		}
+	}
+	break;
+	case TOKEN_IF:
+	{/*检查有关if的问题？作用域栈也要保存返回值*/
+		TreeNode* r = q->next->next;
+		exp = Exp(r);
+		if (exp->type->kind != BASIC || exp->type->u.basic != 0)
+		{
+			//错误7 操作符类型不匹配
+			printf("Error type %d at Line %d: Type mismatched for operands.\n", 7, q->line);
+		}
+		//提取后续的Stmt
+		TreeNode* s = r->next->next;
+		Stmt(s, rtype);
+		if (s->next && s->next->nodetype == TOKEN_ELSE)
+			Stmt(s->next->next, rtype);
+
+	}
+	break;
+	case TOKEN_WHILE:
+	{/*检查有关while的问题？作用域栈也要保存返回值*/
+		TreeNode* r = q->next->next;
+		exp = Exp(r);
+		if (exp->type->kind != BASIC || exp->type->u.basic != 0)
+		{
+			//错误7 操作符类型不匹配
+			printf("Error type %d at Line %d: Type mismatched for operands.\n", 7, q->line);
+		}
+		//提取后续的Stmt
+		Stmt(r->next->next, rtype);
+	}
+	break;
 	default:
 		break;
 	}
 }
 
+
 /*(5) Local Definitions*/
-void DefList(TreeNode* p)
+void DefList(TreeNode* p, FieldList st)// Done
 {
-	if(p==NULL)	return;
-	TreeNode* q=p->firstChild;
-	if(q==NULL)	return;//说明DefList->null
-	if(q->nodetype == TYPE_Def)
-		Def(q);
-	if(q->next && q->next->nodetype == TYPE_DefList)
-		DefList(q->next);
-	
+	if (p == NULL)	return;
+	TreeNode* q = p->firstChild;
+	if (q == NULL)	return;
+	if (q->nodetype == TYPE_Def)
+		Def(q, st);
+	if (q->next && q->next->nodetype == TYPE_DefList)
+		DefList(q->next, st);
+
 }
 
-void Def(TreeNode* p)
+void Def(TreeNode* p, FieldList st)
 {
-	if(p==NULL)	return;
-	TreeNode* q=p->firstChild;
+	if (p == NULL)	return;
+	TreeNode* q = p->firstChild;
 	Type specifier = NULL;
-	if(q && q->nodetype == TYPE_Specifier)
+	if (q && q->nodetype == TYPE_Specifier)
 		specifier = Specifier(q);
 	else
 	{
 		ErrorGenerator("Wrong in Def-> not Speicifier");
 		return;
 	}
-		
-	if(q->next && q->next->nodetype == TYPE_DecList)
-		DecList(q->next, specifier);
+	if (q->next && q->next->nodetype == TYPE_DecList)
+	{
+		/*vector *declist = (vector*)malloc(sizeof(vector));
+		declist->val = NULL;
+		declist->next = NULL;
+		declist->last = declist;*/
+
+		//代替
+		vector* declist = CreateVector();
+
+		DecList(q->next, specifier, declist, st);
+	}
 	//if(!q->next->next || strcmp(q->next->next->name,"SEMI")!=0)	return;
 }
-//传入类型参数，这里接下来都要用到这个类型
-void DecList(TreeNode* p, Type specifier)
+
+void DecList(TreeNode* p, Type specifier, vector *declist, FieldList st)
 {
-	if(p==NULL)	return;
-	TreeNode* q=p->firstChild;
-	if(q && q->nodetype == TYPE_Dec)
+	if (p == NULL)	return;
+	TreeNode* q = p->firstChild;
+	if (q && q->nodetype == TYPE_Dec)
 	{
-		//Dec包含了名字
-		Dec(q, specifier);
-		if(!q->next || strcmp(q->next->name,"COMMA")!=0)	return;
-		if(q->next->next && strcmp(q->next->next->name,"DecList")==0)
-			DecList(q->next->next, specifier);
+		Dec(q, specifier, declist, st);
+		if (!q->next || q->next->nodetype != TOKEN_COMMA)	return;
+		if (q->next->next && q->next->next->nodetype == TYPE_DecList)
+			DecList(q->next->next, specifier, declist, st);
 	}
 	else
 	{
 		ErrorGenerator("Wrong in DecList-> Not Dec");
 	}
-	
 }
-
-void Dec(TreeNode* p, Type specifier)
+//Exp应该返回VarObject类型
+void Dec(TreeNode* p, Type specifier, vector *declist, FieldList st)
 {
-	if(p==NULL)	return;
-	TreeNode* q=p->firstChild;
-	if(q && strcmp(q->name,"VarDec")==0)
+	if (p == NULL)	return;
+	TreeNode* q = p->firstChild;
+	if (q && q->nodetype == TYPE_VarDec)
 	{
-		
-		if(q->next && strcmp(q->next->name,"ASSIGNOP")==0)
+		Type Array = NULL;
+		VarDec(q, specifier, declist, Array, st);
+		if (q->next && q->next->nodetype == TOKEN_ASSIGNOP)
 		{
-			/* need to record both sides of the "=" */
-			ValHashTable value = Exp(q->next->next);
-			if(q->next->next && q->next->next->nodetype == TYPE_Exp)
-				value = Exp(q->next->next);
-			//这里还不需要考虑赋值问题，如果需要赋值的话就在这里进行修改
-			VarDec(q, specifier, true);//true表示需要向符号表加入
+			/* need to record both sides of the "=" */  //check error 5;
+			;
+			VarObject* exp = NULL;
+			if (q->next->next && q->next->next->nodetype == TYPE_Exp)
+			{
+				if (st != NULL)
+				{
+					printf("Error type %d at Line %d: Struct variables cannot be initialized.\n", 15, q->next->line);
+					return;
+				}
+				exp = Exp(q->next->next);
+				//将exp与declist的最后一个进行类型判断，并可以考虑赋值等操作
+				bool equal = typeEqual(declist->last->val->type, exp->type);
+				if (!equal)
+				{
+					printf("Error type %d at Line %d: Type mismatched for assignment.\n", 5, q->next->line);
+					return;
+				}
+			}
+			else
+			{
+				printf("Error in Dec\n");
+			}
+			
 		}
-		else
-		{
-			VarDec(q, specifier, true);//true表示需要向符号表加入
-		}
-	}	
-}
-
-
-/*(6) Expressions*/
-//返回一个临时的变量，可以用于以后实验中赋值的问题。
-ValHashTable Exp(TreeNode* p)//!
-{
-	if(p==NULL)	return;
-	TreeNode* q=p->firstChild;
-	if(q==NULL)	return;
-	if(q->nodetype == TYPE_Exp)
-	{
-		ValHashTable left = Exp(q);
-		if(q->next==NULL)	return;
-		TreeNode* r=q->next->next;
-		switch(q->next->nodetype)//match or not important
-		{
-		case TOKEN_ASSIGNOP:{
-						if(r==NULL)	return;
-						ValHashTable right = Exp(r);
-						//TODO:检查左右类型是否符合，然后赋值操作
-			}break;
-		case TOKEN_AND:		{
-						if(r==NULL)	return;
-						ValHashTable right = Exp(r);
-						//TODO:检查左右类型是否符合，然后赋值操作		
-			}break;
-		case TOKEN_OR:		{
-						if(r==NULL)	return;
-						ValHashTable right = Exp(r);
-						//TODO:检查左右类型是否符合，然后赋值操作
-			}break;
-		case TOKEN_RELOP:	{
-						if(r==NULL)	return;
-						ValHashTable right = Exp(r);
-						//TODO:检查左右类型是否符合，然后赋值操作
-			}break;
-		case TOKEN_PLUS:	{
-						if(r==NULL)	return;
-						ValHashTable right = Exp(r);
-						//TODO:检查左右类型是否符合，然后赋值操作
-						//check left ? right				
-			}break;
-		case TOKEN_MINUS:	{
-						if(r==NULL)	return;
-						ValHashTable right = Exp(r);
-						//TODO:检查左右类型是否符合，然后赋值操作
-						//check left ? right	
-			}break;
-		case TOKEN_STAR:	{
-						if(r==NULL)	return;
-						ValHashTable right = Exp(r);
-						//TODO:检查左右类型是否符合，然后赋值操作
-						//check left ? right			
-			}break;
-		case TOKEN_DIV:		{
-						if(r==NULL)	return;
-						ValHashTable right = Exp(r);
-						//TODO:检查左右类型是否符合，然后赋值操作
-						//check left ? right					
-			}break;
-		case TOKEN_LB:		{
-						if(r==NULL)	return;
-						ValHashTable right = Exp(r->next);
-						//TODO:检查左右类型是否符合，然后赋值操作
-						//这里可能出现错误right的值不是int
-						//这里表示的是exp[(int)exp]数组
-						if(r->next==NULL)	return;	//RB
-			}break;		
-		case TOKEN_DOT:		{
-						char name[33];
-						if(strcmp(r->name,"ID"))
-							strcpy(name,r->value);	
-						//检测left是不是一个结构体，错误类型13，非结构体使用DOT
-						//检测右侧name是否是结构体的成员
-			}break;
-		default:printf("error!\n");
-		}			
 	}
-	else if(q->nodetype == TOKEN_LP)
+}
+
+
+
+/*(6) Expressions*/  //TO BE CONTINUE
+VarObject* Exp(TreeNode* p)//!
+{
+	if (p == NULL)	return NULL;
+	TreeNode* q = p->firstChild;
+	if (q == NULL)	return NULL;
+	if (q->nodetype == TYPE_Exp)
+	{
+		VarObject* exp = Exp(q);
+		VarObject* exp1 = NULL;
+		if (q->next == NULL)	return NULL;
+		TreeNode* r = q->next->next;
+		switch (q->next->nodetype)//match or not, important
+		{
+		case TOKEN_ASSIGNOP: {
+			if (r == NULL)	return NULL;
+			exp1 = Exp(r);
+			//1. 判断exp是否为右值表达式
+			if (exp->lvalue == false)
+			{
+				printf("Error type %d at Line %d: The left-hand side of an assignment must be a variable.\n", 6, q->next->line);
+				return newVar(false);
+			}
+			//2. 判断exp与exp1的类型是否相同
+			bool equal = typeEqual(exp->type, exp1->type);
+			if (!equal)
+			{
+				printf("Error type %d at Line %d: Type mismatched for assignment.\n", 5, q->next->line);
+				return newVar(false);
+			}
+			return exp1;//需要补充赋值过程
+		}break;
+		case TOKEN_AND:
+		case TOKEN_OR: {
+			if (r == NULL)	return NULL;
+			exp1 = Exp(r);
+			//判断exp与exp1是否都为int
+			if ((exp->type->kind != BASIC || exp->type->u.basic != 0) || (exp1->type->kind != BASIC || exp1->type->u.basic != 0))
+			{
+				//错误7 操作符类型不匹配
+				printf("Error type %d at Line %d: Type mismatched for operands.\n", 7, q->next->line);
+				return newVar(false);
+			}
+			VarObject* tmp = newVarObject(0);
+			tmp->type->u.basic = 0;
+			//tmp->u.value计算 
+			tmp->lvalue = false;
+			return tmp;
+		}break;
+		case TOKEN_RELOP: {
+			if (r == NULL)	return NULL;
+			exp1 = Exp(r);
+			//判断exp与exp1是否都为int或float
+			if (exp->type->kind != BASIC || exp1->type->kind != BASIC || exp->type->u.basic != exp1->type->u.basic)
+			{
+				//错误7 操作符类型不匹配
+				printf("Error type %d at Line %d: Type mismatched for operands.\n", 7, q->next->line);
+				return newVar(false);
+			}
+			VarObject* tmp = newVarObject(0);
+			tmp->type->u.basic = 0;
+			//tmp->u.value计算 ;RELOP中：true返回非0，false返回0
+			tmp->lvalue = false;
+			return tmp;
+		}break;
+		case TOKEN_PLUS:
+		case TOKEN_MINUS:
+		case TOKEN_STAR:
+		case TOKEN_DIV: {
+			if (r == NULL)	return NULL;
+			exp1 = Exp(r);
+			//判断exp与exp1是否都为int或float
+			if (exp->type->kind != BASIC || exp1->type->kind != BASIC || exp->type->u.basic != exp1->type->u.basic)//!
+			{
+				printf("Error type %d at Line %d: Type mismatched for operands.\n", 7, q->next->line);
+				return newVar(false);
+			}
+			VarObject* tmp = newVarObject(0);
+			tmp->type->u.basic = exp->type->u.basic;//0或者1
+													//tmp->u.value计算
+			tmp->lvalue = false;
+			return tmp;
+		}break;
+		case TOKEN_LB: {
+			//判断exp是否为数组型
+			if (exp->type->kind != ARRAY)
+			{
+				printf("Error type %d at Line %d: \"%s\" is not an array.\n", 10, q->next->line, exp->name);
+				VarObject *tmp=newVar(true);
+				tmp->type=exp->type;
+				return tmp;
+			}
+			if (r == NULL)	return NULL;
+			exp1 = Exp(r);
+			//判断exp1是否为int型
+			if (exp1->type->kind != BASIC || exp1->type->u.basic != 0)
+			{
+				//报错12
+				printf("Error type %d at Line %d: The number in \"[]\" is not an integer.\n", 12, q->next->line);
+				//虽然不是整数，但还是要返回数组中的类型
+			}
+			if (r->next == NULL)	return NULL;	//RB
+			VarObject* tmp = newVar(true);
+			tmp->name = exp->name;//名字为多维数组的名字 ?; 用不用判断数组越界？
+			tmp->type = exp->type->u.array.elem;
+			tmp->lvalue = true;
+			return tmp;
+		}break;
+		case TOKEN_DOT: {
+			//判断exp是否为结构体，是则返回该结构体中的域
+			if (exp->type->kind != STRUCTURE)
+			{
+				printf("Error type %d at Line %d: Illegal use of \".\".\n", 13, q->next->line);
+				return newVar(true);
+			}
+			//判断ID是否是该结构体中的域,写函数
+			Type fieldType = CheckInStructure(exp->type, r->value);
+			if (fieldType == NULL)
+			{
+				printf("Error type %d at Line %d: Non-existent field of \"%s\".\n", 14, q->next->line, r->value);
+				return newVar(true);
+			}
+			VarObject* tmp = newVar(true);
+			tmp->name = (char*)malloc(3 * Length * sizeof(char));//名字为结构体变量名字+'.'+域名，如 x.y;
+			strcpy(tmp->name, exp->name);
+			strcat(tmp->name, ".");
+			strcat(tmp->name, r->value);
+			tmp->type = fieldType;
+			tmp->lvalue = true;
+			return tmp;
+
+		}break;
+		default:printf("error!\n");
+		}
+	}
+	else if (q->nodetype == TOKEN_LP)
 	{
 		//表示（exp）
 		return Exp(q->next);
 	}
-	else if(q->nodetype == TOKEN_MINUS)
+	else if (q->nodetype == TOKEN_MINUS)
 	{
 		//表示exp-> -exp
-		ValHashTable right = Exp(q->next);
+		VarObject* right = Exp(q->next);
 		//转成负号返回即可
 		//TODO:对right 值操作
+		right->lvalue = false;
 		return right;
 	}
-	else if(q->nodetype == TOKEN_NOT)
+	else if (q->nodetype == TOKEN_NOT)
 	{
 		//表示exp-> ！exp
-		ValHashTable right = Exp(q->next);
+		VarObject* right = Exp(q->next);
 		//转成正确的类型返回即可
 		//TODO:对right 值操作
+		right->lvalue = false;
 		return right;
 	}
-	else if(q->nodetype == TOKEN_ID)
+	else if (q->nodetype == TOKEN_ID)
 	{
-		ValHashTable tmp;
+		VarObject* tmp = NULL;
 		//构建常量ID
-		//TODO：检查符号表中是否有该ID，是否已经定义？
+		//TODO：检查符号表中是否有该ID，是否已经定义
 		//接下来可能是ID(Args)或者ID()
-		if(q->next->next->nodetype == TYPE_Args)
+		if (q->next)
 		{
-			//ID（Args）
-			//得到参数列表
-			vector* args = NULL;
-			Args(q->next->next, args);
-			//检查参数列表是否符合符号表
+			//从函数表中获取该name(函数名)对应的信息，利用返回值构建tmp
+			VarObject* vexist = CheckInValHashTable(q->value, false);
+			if (vexist != NULL)
+			{
+				printf("Error type %d at Line %d: \"%s\" is not a function.\n", 11, q->line, q->value);
+				return newVar(true);
+			}
+			FuncObject* fexist = CheckInFuncHashTable(q->value);
+			if (fexist == NULL)
+			{
+				printf("Error type %d at Line %d: Undefined function \"%s\".\n", 2, q->line, q->value);
+				return newVar(false);
+			}
+			if (q->next->next->nodetype == TYPE_Args)
+			{
+				//ID（Args）,得到参数列表
+				int index = 1;
+				vector *args = (vector*)malloc(sizeof(vector));
+				args->val = NULL;
+				args->next = NULL;
+				args->last = args;
+				Args(q->next->next, args, index);
+				//检查参数列表类型是否符合符号表
+				int nonequal = 0;
+				if (args->last->index != fexist->args->last->index)
+					nonequal = 1;
+				else
+				{
+					vector* p = args->next;
+					vector* pf = fexist->args->next;
+					while (p && pf)
+					{
+						bool equal = typeEqual(p->val->type, pf->val->type);
+						if (!equal)
+						{
+							nonequal = 1; break;
+						}
+						p=p->next; pf=pf->next;
+					}
+				}
+				if (nonequal)
+				{
+					//printf("fact:%d, func:%d\n",args->last->index,fexist->args->last->index);
+					printf("Error type %d at Line %d: Function \"%s\" is not applicable for arguments.\n", 9, q->line, q->value);
+					return newVar(false);
+				}
+			}
+			else
+			{
+				//ID(), 检查ID是否是函数以及参数是否正确
+				if (fexist->args->last->val != NULL)
+				{
+					printf("Error type %d at Line %d: Function \"%s\" is not applicable for arguments.\n", 9, q->line, q->value);
+					return newVar(false);
+				}
+			}
+			tmp = (VarObject*)malloc(sizeof(VarObject));
+			//tmp->name=NULL;
+			tmp->type = fexist->rtype;
+			tmp->lvalue = false;
+		}
+		else //从变量表中获取该name(变量名)对应的信息, 构建tmp
+		{
+			VarObject* vexist = CheckInValHashTable(q->value, false);
+			if (vexist == NULL)
+			{
+				printf("Error type %d at Line %d: Undefined variable \"%s\".\n", 1, q->line, q->value);
+				return newVar(true);;
+			}
+			tmp = vexist;
+			tmp->lvalue = true;
+		}
+		return tmp;
+	}
+	else if (q->nodetype == TOKEN_INT || q->nodetype == TOKEN_FLOAT)
+	{
+		VarObject* tmp = newVarObject(0);
+		if (q->nodetype == TOKEN_INT)
+		{
+			tmp->type->u.basic = 0;
+			//tmp->type->value.intValue=atoi(q->value);
 		}
 		else
 		{
-			//ID()
-			//检查ID是否是函数以及参数是否正确，利用返回值构建tmp
+			tmp->type->u.basic = 1;
+			//tmp->type->value.floatValue=atof(q->value);
 		}
-		
-		return tmp;
-	}
-	else if(q->nodetype == TOKEN_INT)
-	{
-		ValHashTable tmp;
-		//构建常量int
-		return tmp;
-	}
-	else if(q->nodetype == TOKEN_FLOAT)
-	{
-		ValHashTable tmp;
-		//构建常量float
+		tmp->lvalue = false;
 		return tmp;
 	}
 }
 
-void Args(TreeNode* p, vector* args)
+void Args(TreeNode* p, vector* args, int index)
 {
-	if(p->firstChild == p->lastChild)
+	if (p->firstChild && p->firstChild->nodetype == TYPE_Exp)
 	{
-		//说明args->exp
-		ValHashTable arg = Exp(p->firstChild);
+		VarObject* arg = Exp(p->firstChild);
+		vector* vitem = (vector*)malloc(sizeof(vector));
+		vitem->index = index;
+		vitem->val = arg;
+		vitem->next = vitem->last = NULL;
 		//将arg加入到args中
+		args->last->next = vitem;
+		args->last = vitem;
 	}
-	else
+	if (p->lastChild && p->lastChild->nodetype == TYPE_Args)
 	{
-		//说明args->exp COMMA exps
-		ValHashTable arg = Exp(p->firstChild);
-		//将arg加入到args中
-		Args(p->firstChild->next->next, args);//接着添加下一个参数
+		Args(p->lastChild, args, index + 1);//接着添加下一个参数
 	}
-	
+
 }
-
-
-
