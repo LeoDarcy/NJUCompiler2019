@@ -164,10 +164,13 @@ void ExtDef(TreeNode* p) //not Done-> the last "CompSt(q->next->next);"
 	{
 		fundec = (FuncObject*)malloc(sizeof(FuncObject));
 		fundec->rtype = specifier;
-		fundec->args = (vector*)malloc(sizeof(vector));
+		/*fundec->args = (vector*)malloc(sizeof(vector));
 		fundec->args->val = NULL;
 		fundec->args->next = NULL;
-		fundec->args->last = fundec->args;
+		fundec->args->last = fundec->args;*/
+		//替代
+		fundec->args = CreateVector();
+
 		FunDec(q->next, fundec);
 		if (fundec->args != NULL)//若重复定义，则会将fundec->args置NULL
 		{
@@ -495,7 +498,8 @@ void ParamDec(TreeNode* p, vector *vars, int index)//Done
 	Type specifier = Specifier(p->firstChild);
 	Type Array = NULL; // 对于函数参数为 int[][]? 按语法表应该是不会出现
 	VarDec(p->lastChild, specifier, vars, Array, NULL);
-	vars->last->index = index;//对于函数参数：每次都是 单个Specifier + 单个VarDec
+	//替换
+	//vars->last->index = index;//对于函数参数：每次都是 单个Specifier + 单个VarDec
 }
 
 
@@ -876,10 +880,13 @@ VarObject* Exp(TreeNode* p)//!
 			{
 				//ID（Args）,得到参数列表
 				int index = 1;
-				vector *args = (vector*)malloc(sizeof(vector));
+				/*vector *args = (vector*)malloc(sizeof(vector));
 				args->val = NULL;
 				args->next = NULL;
-				args->last = args;
+				args->last = args;*/
+
+				//替换
+				vector *args = CreateVector();
 				Args(q->next->next, args, index);
 				//检查参数列表类型是否符合符号表
 				int nonequal = 0;
@@ -956,10 +963,12 @@ void Args(TreeNode* p, vector* args, int index)
 	if (p->firstChild && p->firstChild->nodetype == TYPE_Exp)
 	{
 		VarObject* arg = Exp(p->firstChild);
-		vector* vitem = (vector*)malloc(sizeof(vector));
+		/*vector* vitem = (vector*)malloc(sizeof(vector));
 		vitem->index = index;
 		vitem->val = arg;
-		vitem->next = vitem->last = NULL;
+		vitem->next = vitem->last = NULL;*/
+		//替换
+		vector* vitem = CreateVector();
 		//将arg加入到args中
 		args->last->next = vitem;
 		args->last = vitem;
