@@ -644,6 +644,9 @@ void Dec(TreeNode* p, Type specifier, vector *declist, FieldList st)
 	{
 		Type Array = NULL;
 		VarDec(q, specifier, declist, Array, st);
+
+		insertFields(declist->last->val->name, computeSize(declist->last->val->type));
+
 		if (q->next && q->next->nodetype == TOKEN_ASSIGNOP)
 		{
 			/* need to record both sides of the "=" */  //check error 5;
@@ -665,6 +668,15 @@ void Dec(TreeNode* p, Type specifier, vector *declist, FieldList st)
 					printf("Error type %d at Line %d: Type mismatched for assignment.\n", 5, q->next->line);
 					return;
 				}
+
+				/*数组相关，确认是否需要添加这一项*/
+					if(right->kind == ADDR)
+					{
+						Operand tmpl = newTemp(tempCount++);
+						tmpl->kind = AddrVar;
+						tmpl->u.no = right->u.no;
+						right = tmpl;
+					}
 				insertAssignLID(declist->last->val->name, right);
 			}
 		}
@@ -672,7 +684,7 @@ void Dec(TreeNode* p, Type specifier, vector *declist, FieldList st)
 		/*lab3*/
 		else
 		{
-			insertFields(declist->last->val->name, computeSize(declist->last->val->type));
+			//insertFields(declist->last->val->name, computeSize(declist->last->val->type));
 		}
 		
 	}
@@ -831,6 +843,14 @@ VarObject* Exp(TreeNode* p, Operand place)//!
 			tmp->lvalue = true;
 			
 			
+			/*数组相关，确认是否需要添加这一项*/
+				if(rightExp->kind == ADDR)
+				{
+					Operand tmpl = newTemp(tempCount++);
+					tmpl->kind = AddrVar;
+					tmpl->u.no = rightExp->u.no;
+					rightExp = tmpl;
+				}
 			int sizelen = 4;
 			if(exp->type->kind!=BASIC) 
 				sizelen = computeSize(exp->type->u.array.elem);
@@ -1000,9 +1020,14 @@ VarObject* Exp(TreeNode* p, Operand place)//!
 					{
 						Operand arg=p->op;
 						if(arg!=NULL)
+						{
 							insertFuncArgs(arg);
+						}
+							
 						p=p->next;
 					}
+					if(place == NULL)
+						place = newTemp(tempCount++);
 					insertCall(place, fexist->name);
 				}
 			}
@@ -1015,6 +1040,8 @@ VarObject* Exp(TreeNode* p, Operand place)//!
 					//return newVar(false);  出错时还是返回原来函数的返回类型
 				}
 				//lab3
+				if(place == NULL)
+					place = newTemp(tempCount++);
 				if(strcmp(fexist->name,"read")==0)
 					insertReadfunc(place);
 				else
@@ -1081,7 +1108,14 @@ void Args(TreeNode* p, vector* args, int index, OperandList* Arg_list)
 			{
 				Operand tmpl = newTemp(tempCount++);
 				tmpl->kind = AddrVar;
-				tmpl->u.no = t1->u.no;
+				tmpl->u = t1->u;
+				t1 = tmpl;
+			}
+			else if(arg->type != BASIC)
+			{
+				Operand tmpl = newTemp(tempCount++);
+				tmpl->kind = PointVar;
+				tmpl->u = t1->u;
 				t1 = tmpl;
 			}
 
