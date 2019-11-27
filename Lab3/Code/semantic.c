@@ -26,6 +26,9 @@ Type newType()
 VarObject* newVar(bool lv)
 {
 	VarObject* var = (VarObject*)malloc(sizeof(VarObject));
+	//lab3 数组
+	var->isParam = false;
+
 	var->type = newType();
 	var->lvalue = lv;
 	return var;
@@ -99,6 +102,9 @@ bool typeEqual(Type t1, Type t2)
 VarObject* newVarObject(int kind)
 {
 	VarObject* newone = (VarObject*)malloc(sizeof(VarObject));
+	//lab3 数组
+	newone->isParam = false;
+
 	newone->name = NULL;   //没名字
 	newone->type = (Type)malloc(sizeof(Type_));
 	switch (kind)
@@ -198,7 +204,11 @@ void ExtDef(TreeNode* p) //not Done-> the last "CompSt(q->next->next);"
 			while(arg)
 			{
 				if(arg->val)
+				{
 					insertFuncParam(arg->val->name);
+					//printf("%s\n", arg->val->name);
+					arg->val->isParam = true;
+				}
 				arg=arg->next;
 			}			
 		}
@@ -295,6 +305,9 @@ Type StructSpecifier(TreeNode* p)//Done
 		type->u.structure = st;
 
 		VarObject* val = (VarObject*)malloc(sizeof(VarObject));
+		//lab3 数组
+		val->isParam = false;
+
 		val->name = type->u.structure->name;//赋值结构体名称；则判断结构体是否相同时--名字同
 		val->type = type;
 		if(vexist == NULL && sexist == NULL)
@@ -336,6 +349,9 @@ void VarDec(TreeNode* p, Type specifier, vector *list, Type Array, FieldList st)
 		//首先check 该变量在同一深度是否已经存在，错误3
 		vector* vardec = (vector*)malloc(sizeof(vector));
 		vardec->val = (VarObject*)malloc(sizeof(VarObject));
+		//lab3 数组
+		vardec->val->isParam = false;
+
 		vardec->val->name = q->value;
 		vardec->next = vardec->last = NULL;
 		if (Array == NULL)//not array
@@ -674,7 +690,7 @@ void Dec(TreeNode* p, Type specifier, vector *declist, FieldList st)
 					{
 						Operand tmpl = newTemp(tempCount++);
 						tmpl->kind = AddrVar;
-						tmpl->u.no = right->u.no;
+						tmpl->u = right->u;
 						right = tmpl;
 					}
 				insertAssignLID(declist->last->val->name, right);
@@ -731,14 +747,14 @@ VarObject* Exp(TreeNode* p, Operand place)//!
 			{
 				Operand tmpl = newTemp(tempCount++);
 				tmpl->kind = AddrVar;
-				tmpl->u.no = leftExp->u.no;
+				tmpl->u = leftExp->u;
 				leftExp = tmpl;
 			}
 			if(rightExp->kind == ADDR)
 			{
 				Operand tmpl = newTemp(tempCount++);
 				tmpl->kind = AddrVar;
-				tmpl->u.no = rightExp->u.no;
+				tmpl->u = rightExp->u;
 				rightExp = tmpl;
 			}
 
@@ -747,6 +763,7 @@ VarObject* Exp(TreeNode* p, Operand place)//!
 
 			if(place!=NULL)
 				insertAssignLOP(place, rightExp);
+			//printf("name = s, kind = %d\n",  place->kind);
 			return exp1;//需要补充赋值过程
 		}break;
 		case TOKEN_AND:
@@ -800,14 +817,14 @@ VarObject* Exp(TreeNode* p, Operand place)//!
 			{
 				Operand tmpl = newTemp(tempCount++);
 				tmpl->kind = AddrVar;
-				tmpl->u.no = t1->u.no;
+				tmpl->u = t1->u;
 				t1 = tmpl;
 			}
 			if(t2->kind == ADDR)
 			{
 				Operand tmpl = newTemp(tempCount++);
 				tmpl->kind = AddrVar;
-				tmpl->u.no = t2->u.no;
+				tmpl->u = t2->u;
 				t2 = tmpl;
 			}
 			
@@ -848,7 +865,7 @@ VarObject* Exp(TreeNode* p, Operand place)//!
 				{
 					Operand tmpl = newTemp(tempCount++);
 					tmpl->kind = AddrVar;
-					tmpl->u.no = rightExp->u.no;
+					tmpl->u = rightExp->u;
 					rightExp = tmpl;
 				}
 			int sizelen = 4;
@@ -864,7 +881,7 @@ VarObject* Exp(TreeNode* p, Operand place)//!
 			place->kind = ADDR;
 			Operand newright = newTemp(tempCount++);
 			insertBinop(newright, constop, rightExp, 13);//MUL
-			if(leftExp->kind==ADDR)//表示前面已经是地址
+			if(leftExp->kind==ADDR || leftExp->kind == AddrParam)//表示前面已经是地址
 			{
 				//补充上place = leftExp + sizelen*exp1.val;
 				insertBinop(place, leftExp, newright, 11);//ADD
@@ -1012,6 +1029,8 @@ VarObject* Exp(TreeNode* p, Operand place)//!
 				if(strcmp(fexist->name,"write")==0)
 				{
 					insertWritefunc(Arg_list->next->op);//arg[1]
+					//printf("%d\n", Arg_list->next->op->kind);
+					//assert(false);
 				}
 				else
 				{
@@ -1048,6 +1067,9 @@ VarObject* Exp(TreeNode* p, Operand place)//!
 					insertCall(place, fexist->name);
 			}
 			tmp = (VarObject*)malloc(sizeof(VarObject));
+			//lab3 数组
+			tmp->isParam = false;
+
 			//tmp->name=NULL;
 			tmp->type = fexist->rtype;
 			tmp->lvalue = false;
@@ -1063,7 +1085,8 @@ VarObject* Exp(TreeNode* p, Operand place)//!
 			}
 			place->kind=VAR;
 			place->u.val=q->value;		
-
+			if(vexist->isParam && vexist->type->kind != BASIC)
+				place->kind=AddrParam;
 			tmp = vexist;
 			tmp->lvalue = true;
 			return tmp;
@@ -1111,7 +1134,11 @@ void Args(TreeNode* p, vector* args, int index, OperandList* Arg_list)
 				tmpl->u = t1->u;
 				t1 = tmpl;
 			}
-			else if(arg->type != BASIC)
+			else if (t1->kind == AddrParam)
+			{
+				;
+			}
+			else if(arg->type->kind != BASIC)
 			{
 				Operand tmpl = newTemp(tempCount++);
 				tmpl->kind = PointVar;

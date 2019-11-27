@@ -12,7 +12,8 @@ typedef struct Operand_
 {
 	enum { VAR, CONST, ADDR, TEMPVAR, LABEL, FUNC,
 			AddrVar,//表示需要加上*
-			PointVar//表示需要加上&
+			PointVar,//表示需要加上&
+			AddrParam//表示地址的传参
 			 } kind;
 	union {
 		int no;
@@ -79,5 +80,7 @@ void insertFuncArgs(Operand arg);
 void insertGetAddrOrPointer(Operand result, Operand op1, int kind);
 void printInterCodes();
 char* trans(Operand op);
+
+
 #endif
 

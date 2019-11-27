@@ -282,6 +282,7 @@ char* trans(Operand op)
 				strcpy(result, "&");
 				strcat(result, op->u.val);
 				return result;};break;//加上&
+		case 8:{return op->u.val;};break;
 	default:
 		break;
 	}
