@@ -23,19 +23,6 @@ typedef struct Operand_
 		//Operand addr; //
 	} u;
 } Operand_;
-//寄存器表示表
-/*struct map
-{
-	int lastest_line_number;
-	reg number;
-	Operand Operand(a);
-};
-//栈地址映射表
-struct  hashmap
-{
-	<Operand, offset>;
-};*/
-
 
 typedef struct InterCode
 {

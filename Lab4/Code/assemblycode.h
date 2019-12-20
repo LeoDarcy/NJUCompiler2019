@@ -22,4 +22,4 @@ int Line_Count;
 HashMap* OperandInfor;
 void initReg();
 void printAssemblyCodes(FILE *fw);
-#endif ASSEMBLYCODE_H
+#endif

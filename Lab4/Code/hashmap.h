@@ -28,4 +28,4 @@ bool putHashMap(HashMap* hashmap, int key, int offset, int reg_no, int type);
 DataType getItemFromHashMap(HashMap* hashmap, int key);
 
 bool destroyHashMap(HashMap* hashmap);
-#endif HASHMAP_H
+#endif

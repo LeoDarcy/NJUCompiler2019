@@ -44,13 +44,13 @@ enum RegIdentity{
 	REG_s7,REG_s8,
 	REG_a0, REG_a1, REG_a2, REG_a3
 };
-char* CorresponseReg[REG_SIZE] = {/*调用者负责保存的栈，函数调用时负责保存*/
+/*char* CorresponseReg[REG_SIZE] = {
 	"$t0", "$t1", "$t2", "$t3",
 	"$t4", "$t5", "$t6",
 	"$t7", "$t8", "$t9",
-	/*被调用者负责保存的栈，使用前必须先push保存*/
+	
 	"$s0", "$s1", "$s2", "$s3",
 	"$s4","$s5", "$s6",
 	"$s7", "$s8",
-	"$a0", "$a1", "$a2", "$a3"}
+	"$a0", "$a1", "$a2", "$a3"};*/
 #endif 

@@ -1,5 +1,33 @@
 #include "assemblycode.h"
 extern InterCodes* head;
+char* CorresponseReg(int reg_no)
+{
+	char*result = (char*)malloc(10);
+	strcpy(result, "$t0");
+	if(reg_no < 0)
+	{
+		strcpy(result, "???Wrong in reg_no");
+	}
+	else if(reg_no < 10)
+	{
+		result[2] = result[2] + reg_no;
+	}
+	else if(reg_no < 19)
+	{
+		result[1] = 's';
+		result[2] = result[2] + (reg_no-10);
+	}
+	else if(reg_no < REG_SIZE)
+	{
+		result[1] = 'a';
+		result[2] = result[2] + (reg_no-19);
+	}
+	else
+	{
+		strcpy(result, "???Wrong in reg_no>reg_size");
+	}
+	return result;
+}
 void initReg()
 {
 	for(int i = 0; i < REG_SIZE; i++)
@@ -19,8 +47,10 @@ char* get_reg(Operand op, FILE *fw)
     //TODO:实现找到对应的寄存器，在这里可以继续向文件中写入寄存器存取操作
 	int key = (int)op;
 	DataType result = getItemFromHashMap(OperandInfor, key);
+	printf("find %s\n", trans(op));
 	if(result.key == key)
 	{
+		printf("  inside and type :%d \n", result.type);
 		//说明已经找到相关的
 		switch (result.type)
 		{
@@ -28,7 +58,7 @@ char* get_reg(Operand op, FILE *fw)
 			//没有保存的情况：理论上不存在
 		};break;
 		case 1:{//表示在寄存器中
-			return CorresponseReg[result.reg_no];
+			return CorresponseReg(result.reg_no);
 		};break;
 		case 2:{//只存在在offset中
 			if(regs_Current >= REG_SIZE)//说明没有有空闲可用
@@ -37,7 +67,7 @@ char* get_reg(Operand op, FILE *fw)
 			}
 			else
 			{
-				fprintf(fw,"lw %s, %d($sp)\n", CorresponseReg[regs_Current], result.offset);//加载到寄存器中
+				fprintf(fw,"lw %s, %d($sp)\n", CorresponseReg(regs_Current), result.offset);//加载到寄存器中
 				//修正变量对应信息的值
 				result.type = 3;
 				result.reg_no = regs_Current;
@@ -47,11 +77,11 @@ char* get_reg(Operand op, FILE *fw)
 				Regs[regs_Current].lastest_line_number = Line_Count;//记录行数
 				Regs[regs_Current].varOperand = op;
 				regs_Current++;
-				return CorresponseReg[regs_Current-1];
+				return CorresponseReg(regs_Current-1);
 			}
 		}
 		case 3:{
-			return CorresponseReg[result.reg_no];
+			return CorresponseReg(result.reg_no);
 		}
 		default:
 			return "？？？Wrong in get_reg";
@@ -59,6 +89,7 @@ char* get_reg(Operand op, FILE *fw)
 	}
 	else
 	{
+		printf(" No in \n");
 		if(regs_Current >= REG_SIZE)//说明没有有空闲可用
 		{
 			//TODO:实现内存切换
@@ -76,7 +107,7 @@ char* get_reg(Operand op, FILE *fw)
 			Regs[regs_Current].lastest_line_number = Line_Count;//记录行数
 			Regs[regs_Current].varOperand = op;
 			regs_Current++;
-			return CorresponseReg[regs_Current-1];
+			return CorresponseReg(regs_Current-1);
 		}
 		
 	}
@@ -137,7 +168,28 @@ void printAssemblyCodes(FILE *fw)
 			//fprintf(fw,"WRITE %s\n",trans(code.u.single.op));
 			};break;
 		case ASSIGN:{
-			
+			fprintf(fw,"%s := %s\n",trans(code.u.assign.left), trans(code.u.assign.right));
+			if(code.u.assign.right->kind == CONST)
+			{
+				fprintf(fw, "li %s, %s\n", get_reg(code.u.assign.left, fw), code.u.assign.right->u.val);
+			}
+			else if(code.u.assign.left->kind == VAR && code.u.assign.right->kind == VAR)
+			{
+				fprintf(fw, "move %s, %s\n", get_reg(code.u.assign.left, fw), get_reg(code.u.assign.right, fw));
+			}
+			else if(code.u.assign.left->kind == VAR && code.u.assign.right->kind == TEMPVAR)
+			{
+				fprintf(fw, "move %s, %s\n", get_reg(code.u.assign.left, fw), get_reg(code.u.assign.right, fw));
+			}
+			else if(code.u.assign.left->kind == TEMPVAR && code.u.assign.right->kind == VAR)
+			{
+				fprintf(fw, "move %s, %s\n", get_reg(code.u.assign.left, fw), get_reg(code.u.assign.right, fw));
+			}
+			else if(code.u.assign.left->kind == TEMPVAR && code.u.assign.right->kind == TEMPVAR)
+			{
+				fprintf(fw, "move %s, %s\n", get_reg(code.u.assign.left, fw), get_reg(code.u.assign.right, fw));
+			}
+			else
 			fprintf(fw,"%s := %s\n",trans(code.u.assign.left), trans(code.u.assign.right));};break;
 		case CALL:{
 			//适用于没有参数的情况，有参数的情况交给arg那部分解决

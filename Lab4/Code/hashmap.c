@@ -65,7 +65,7 @@ DataType getItemFromHashMap(HashMap* hashmap, int key)
     result.key = key + 1;
     result.offset = 0;
     result.reg_no = -1;
-    result.type = 0;
+    result.type = -1;
     int index = getIndexFromKey(key, hashmap->size);
     HashNode* pointer = &(hashmap->table[index]);
     while(pointer != NULL)
@@ -75,6 +75,8 @@ DataType getItemFromHashMap(HashMap* hashmap, int key)
             result.key = key;
             result.offset = pointer->data.offset;
             result.reg_no = pointer->data.reg_no;
+            result = pointer->data;
+            return pointer->data;
         }
         pointer = pointer->next;
     }
