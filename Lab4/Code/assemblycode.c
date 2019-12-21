@@ -1,5 +1,6 @@
 #include "assemblycode.h"
 extern InterCodes* head;
+VarDescriptor* OperandInfor[tsize];
 char* CorresponseReg(int reg_no)
 {
 	char*result = (char*)malloc(10);
@@ -36,29 +37,90 @@ void initReg()
 		Regs[i].lastest_line_number = -1;
 		Regs[i].varOperand = 0;
 	}
-	OperandInfor = createHashMap(60);
+	for(int i=0; i<tsize; i++)
+	{
+		OperandInfor[i] = NULL;
+	}
 	regs_Current = 0;
 	Line_Count = 0;
 }
+
+//加入或者更新,注意item里面的key必须是新建的（保证正确）
+bool putVarDescriptor(VarDescriptor* item)
+{
+	if(item == NULL) return;
+	unsigned int key = pjwhash(item->key);
+	VarDescriptor* queue = OperandInfor[key];
+	if(queue == NULL)
+	{
+		item->next = NULL;
+	}
+	else
+	{
+		//先找是不是已经存在在表里
+		VarDescriptor* beginlook = queue;
+		while(beginlook != NULL)
+		{
+			if(strcmp(beginlook->key,item->key) == 0)
+			{
+				//找到并更新
+				beginlook->offset = item->offset;
+				beginlook->reg_no = item->reg_no;
+				beginlook->type = item->type;
+				return true;
+			}
+			beginlook = beginlook->next;
+		}
+	}
+	//加入到开头
+	item->next = queue;
+	OperandInfor[key] = item;
+}
+//返回找到的
+VarDescriptor* getItemFromVarDescriptor(char* keychar)
+{
+	unsigned int key = pjwhash(keychar);
+	VarDescriptor* queue = OperandInfor[key];
+	if(queue == NULL)
+	{
+		return NULL;
+	}
+	else
+	{
+		//先找是不是已经存在在表里
+		VarDescriptor* beginlook = queue;
+		while(beginlook != NULL)
+		{
+			if(strcmp(beginlook->key,keychar) == 0)
+			{
+				//找到并返回
+				return beginlook;
+			}
+			beginlook = beginlook->next;
+		}
+	}
+	return NULL;
+}
+
+
 //fw传入的好处是可以当op第一次在汇编中出现时，需要补充lw来加载的一行才能使用，以及寄存器与栈交换的代码也需要在这里完成
 char* get_reg(Operand op, FILE *fw)
 {
 	//只能使用t0-t9， s0-s8
     //TODO:实现找到对应的寄存器，在这里可以继续向文件中写入寄存器存取操作
-	int key = (int)op;
-	DataType result = getItemFromHashMap(OperandInfor, key);
-	printf("find %s\n", trans(op));
-	if(result.key == key)
+	VarDescriptor* result = getItemFromVarDescriptor(trans(op));
+	//printf("find %s\n", trans(op));
+	if(result != NULL)
 	{
-		printf("  inside and type :%d \n", result.type);
+		//printf("  inside and type :%d \n", result->type);
 		//说明已经找到相关的
-		switch (result.type)
+		switch (result->type)
 		{
 		case 0:{
 			//没有保存的情况：理论上不存在
 		};break;
 		case 1:{//表示在寄存器中
-			return CorresponseReg(result.reg_no);
+			return CorresponseReg(result->reg_no);
 		};break;
 		case 2:{//只存在在offset中
 			if(regs_Current >= REG_SIZE)//说明没有有空闲可用
@@ -67,11 +129,12 @@ char* get_reg(Operand op, FILE *fw)
 			}
 			else
 			{
-				fprintf(fw,"lw %s, %d($sp)\n", CorresponseReg(regs_Current), result.offset);//加载到寄存器中
+				fprintf(fw,"lw %s, %d($sp)\n", CorresponseReg(regs_Current), result->offset);//加载到寄存器中
 				//修正变量对应信息的值
-				result.type = 3;
-				result.reg_no = regs_Current;
-				putHashMap(OperandInfor, result.key,result.offset, result.reg_no, result.type);
+				result->type = 3;
+				result->reg_no = regs_Current;
+				//理论上不需要put，因为指针直接修改了
+				//putVarDescriptor(OperandInfor, result.key,result.offset, result.reg_no, result.type);
 				//修正寄存器保存的值
 				Regs[regs_Current].used = true;
 				Regs[regs_Current].lastest_line_number = Line_Count;//记录行数
@@ -81,7 +144,7 @@ char* get_reg(Operand op, FILE *fw)
 			}
 		}
 		case 3:{
-			return CorresponseReg(result.reg_no);
+			return CorresponseReg(result->reg_no);
 		}
 		default:
 			return "？？？Wrong in get_reg";
@@ -89,7 +152,7 @@ char* get_reg(Operand op, FILE *fw)
 	}
 	else
 	{
-		printf(" No in \n");
+		//printf(" No in \n");
 		if(regs_Current >= REG_SIZE)//说明没有有空闲可用
 		{
 			//TODO:实现内存切换
@@ -98,10 +161,12 @@ char* get_reg(Operand op, FILE *fw)
 		{
 			//加载到寄存器中
 			//修正变量对应信息的值
-			result.key = key;
-			result.type = 1;
-			result.reg_no = regs_Current;
-			putHashMap(OperandInfor, result.key,result.offset, result.reg_no, result.type);
+			result = (VarDescriptor*)malloc(sizeof(VarDescriptor));
+			result->key = trans(op);
+			result->type = 1;
+			result->reg_no = regs_Current;
+			result->offset = 0;
+			putVarDescriptor(result);
 			//修正寄存器保存的值
 			Regs[regs_Current].used = true;
 			Regs[regs_Current].lastest_line_number = Line_Count;//记录行数
@@ -118,10 +183,19 @@ char* get_reg(Operand op, FILE *fw)
 }
 void printAssemblyCodes(FILE *fw)
 {
+	fprintf(fw, ".data\n");
+	fprintf(fw, "_prompt: .asciiz \"Enter an integer:\"\n");
+	fprintf(fw, "_ret: .asciiz \"\\n\" \n");
+	fprintf(fw, ".globl main\n");
+	fprintf(fw, ".text\n");
+	fprintf(fw, "read:\n");
+	fprintf(fw, "li $v0, 4\n");
+	fprintf(fw, "la $a0, _prompt\n");
+	fprintf(fw, "syscall \n li $v0, 5 \n syscall \n jr $ra \n");
+	fprintf(fw,"write:\n li $v0, 1 \n syscall \n li $v0, 4 \n la $a0, _ret \n syscall \n move $v0, $0 \n jr $ra\n");
 	InterCodes* tmp = head;
 	while(tmp != NULL)
 	{
-		//printf("\nline code\n");
 		Line_Count++;
 		InterCode code = tmp->code;
 		switch (code.kind)
@@ -168,7 +242,7 @@ void printAssemblyCodes(FILE *fw)
 			//fprintf(fw,"WRITE %s\n",trans(code.u.single.op));
 			};break;
 		case ASSIGN:{
-			fprintf(fw,"%s := %s\n",trans(code.u.assign.left), trans(code.u.assign.right));
+			//fprintf(fw,"%s := %s\n",trans(code.u.assign.left), trans(code.u.assign.right));
 			if(code.u.assign.right->kind == CONST)
 			{
 				fprintf(fw, "li %s, %s\n", get_reg(code.u.assign.left, fw), code.u.assign.right->u.val);
