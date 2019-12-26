@@ -1,0 +1,29 @@
+FUNCTION main :
+DEC x 20
+a := #0
+b := #1
+i := #0
+LABEL mylabel0 :
+IF i < #5 GOTO mylabel1
+GOTO mylabel2
+LABEL mylabel1 :
+myvar10 := #4 * i
+myvar7 := &x + myvar10
+READ myvar12
+*myvar7 := myvar12
+myvar15 := i + #1
+i := myvar15
+GOTO mylabel0
+LABEL mylabel2 :
+i := #0
+LABEL mylabel3 :
+IF i < #5 GOTO mylabel4
+GOTO mylabel5
+LABEL mylabel4 :
+myvar25 := #4 * i
+myvar22 := &x + myvar25
+WRITE *myvar22
+myvar29 := i + #1
+i := myvar29
+GOTO mylabel3
+LABEL mylabel5 :

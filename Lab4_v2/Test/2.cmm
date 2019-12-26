@@ -1,0 +1,19 @@
+int my(int a1, int a2, int a3, int a4, int a5, int a6)
+{
+	write(a1);
+	write(a2);
+	write(a3);
+	write(a4);
+	write(a5);
+	write(a6);
+	return 0;
+}
+int main()
+{
+	int a = 0, b = 1, i = 0, n, in1 = 10, in2 = 9, in3 = 8,in4=7,in5=6;
+	n = read();
+	a = b + 9;
+	write(a);
+	a = my(60,i,n, in5,in3, in4);
+	return 0;
+}
